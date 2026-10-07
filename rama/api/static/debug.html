@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAMA Depuración</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --surface-2: #f0efec;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --s-detect: #2a78d6;
+    --s-ocr: #eb6834;
+    --s-validate: #1baf7a;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+    --good-ink: #006300;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --surface-2: #232322;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255,255,255,0.10);
+      --s-detect: #3987e5;
+      --s-ocr: #d95926;
+      --s-validate: #199e70;
+      --good-ink: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --s-detect: #3987e5;
+    --s-ocr: #d95926;
+    --s-validate: #199e70;
+    --good-ink: #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1600px; margin: 0 auto; padding: 12px 16px 40px; }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+    padding: 4px 0 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 999px; font-size: 12px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink-2);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--good); }
+  .dot.ko { background: var(--critical); }
+  .dot.warn { background: var(--warning); }
+  button, .btn {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+  }
+  button:hover { background: var(--surface-2); }
+  button.on { background: var(--surface-2); border-color: var(--axis); }
+
+  .kpis {
+    display: grid; gap: 10px; margin-bottom: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; min-width: 0;
+  }
+  .kpi .lbl { font-size: 12px; color: var(--ink-2); }
+  .kpi .val { font-size: 24px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+  .kpi .val small { font-size: 13px; font-weight: 400; color: var(--ink-2); }
+  .kpi .hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .grid { display: grid; gap: 12px; margin-bottom: 12px; }
+  .g-2 { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+  .g-2b { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  @media (max-width: 980px) { .g-2, .g-2b { grid-template-columns: minmax(0, 1fr); } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; min-width: 0;
+  }
+  .card h2 {
+    font-size: 14px; font-weight: 600; margin: 0 0 10px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .card h2 .meta { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .card h2 .right { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; font-weight: 400; }
+
+  .video {
+    position: relative; background: #000; border-radius: 8px; overflow: hidden;
+    aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center;
+  }
+  .video img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .video .ph { color: #898781; font-size: 13px; position: absolute; }
+
+  .current { display: grid; gap: 10px; }
+  .crop-box {
+    background: var(--surface-2); border-radius: 8px; min-height: 90px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .crop-box img { max-width: 100%; max-height: 140px; image-rendering: pixelated; display: block; }
+  .crop-box .ph { color: var(--muted); font-size: 13px; padding: 20px; }
+  .plate {
+    font-family: var(--mono); font-size: 30px; font-weight: 700; letter-spacing: 2px;
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .plate small { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--ink-2); font-family: inherit; }
+  .meters { display: grid; gap: 8px; }
+  .meter .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); }
+  .meter .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .bar {
+    position: relative; height: 8px; border-radius: 4px; background: var(--surface-2); margin-top: 3px;
+  }
+  .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+  .bar .thr { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .55; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--ink);
+    white-space: nowrap;
+  }
+  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .b-aceptada::before, .b-leida::before { background: var(--good); }
+  .b-acumulando::before { background: var(--s-detect); }
+  .b-sin_consenso::before { background: var(--warning); }
+  .b-baja_confianza::before, .b-ocr_vacio::before { background: var(--serious); }
+  .b-perdida::before { background: var(--critical); }
+  .b-cooldown::before, .b-sin_deteccion::before { background: var(--muted); }
+
+  .votes { display: grid; gap: 5px; }
+  .vote { display: grid; grid-template-columns: 110px minmax(0, 1fr) 52px; gap: 8px; align-items: center; font-size: 13px; }
+  .vote .t { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vote .w { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .vote .bar .fill { background: var(--s-detect); }
+  .vote.win .bar .fill { background: var(--good); }
+  .empty { color: var(--muted); font-size: 13px; }
+
+  .chart { position: relative; }
+  .chart canvas { width: 100%; height: 200px; display: block; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend i.line { height: 2px; border-radius: 1px; vertical-align: 3px; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; display: none;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0,0,0,.18); border-radius: 8px; padding: 6px 9px;
+    font-size: 12px; white-space: nowrap;
+  }
+  .tip .k { color: var(--ink-2); }
+  .tip b { font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+  th { font-weight: 600; color: var(--ink-2); font-size: 12px; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: var(--mono); }
+  .scroll { overflow: auto; max-height: 420px; }
+  .scroll.short { max-height: 320px; }
+  td img.thumb { height: 28px; max-width: 110px; border-radius: 3px; display: block; cursor: zoom-in; }
+  td input.truth {
+    font: inherit; font-family: var(--mono); width: 100px; padding: 2px 6px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--page); color: var(--ink);
+    text-transform: uppercase;
+  }
+  .ok-ink { color: var(--good-ink); font-weight: 600; }
+  .ko-ink { color: var(--critical); font-weight: 600; }
+  .dim { color: var(--muted); }
+  tr.live td { background: var(--surface-2); }
+  label.chk { font-size: 12px; color: var(--ink-2); display: inline-flex; gap: 4px; align-items: center; }
+
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none;
+    align-items: center; justify-content: center; z-index: 20; padding: 16px;
+  }
+  .modal img { max-width: 100%; max-height: 80vh; image-rendering: pixelated; background: #000; }
+  .modal.show { display: flex; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>RAMA · Depuración</h1>
+    <span class="sub" id="hdr-sub">—</span>
+    <div class="pills">
+      <span class="pill"><span class="dot" id="dot-ws"></span><span id="lbl-ws">Telemetría</span></span>
+      <span class="pill"><span class="dot" id="dot-cam"></span>Cámara</span>
+      <span class="pill"><span class="dot" id="dot-eq"></span>EQbroker</span>
+      <span class="pill" id="pill-sys">—</span>
+    </div>
+    <span class="spacer"></span>
+    <button id="btn-video" class="on" title="Desactivar el vídeo ahorra CPU en la RPi">Vídeo</button>
+    <button id="btn-pause" title="Congela el registro de frames y las gráficas">Pausar</button>
+    <button id="btn-reset" title="Pone a cero contadores y sesiones en el servidor">Reset</button>
+    <button id="btn-theme" title="Cambiar tema">Tema</button>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi"><div class="lbl">FPS cámara / procesados</div><div class="val" id="k-fps">—</div><div class="hint" id="k-fps-h">frame_skip —</div></div>
+    <div class="kpi"><div class="lbl">Tiempo por frame procesado</div><div class="val" id="k-lat">—</div><div class="hint" id="k-lat-h">p50 · p95</div></div>
+    <div class="kpi"><div class="lbl">Tiempo hasta lectura</div><div class="val" id="k-ttr">—</div><div class="hint" id="k-ttr-h">media desde 1ª detección</div></div>
+    <div class="kpi"><div class="lbl">Vehículos leídos</div><div class="val" id="k-rate">—</div><div class="hint" id="k-rate-h">leídos / (leídos + perdidos)</div></div>
+    <div class="kpi"><div class="lbl">Aciertos (verdad marcada)</div><div class="val" id="k-acc">—</div><div class="hint" id="k-acc-h">escribe la matrícula real en la tabla</div></div>
+    <div class="kpi"><div class="lbl">Lectura de frames</div><div class="val" id="k-read">—</div><div class="hint" id="k-read-h">tiempo de camera.read_frame</div></div>
+  </section>
+
+  <section class="grid g-2">
+    <div class="card">
+      <h2>Cámara <span class="meta" id="video-meta">/ws/camera</span></h2>
+      <div class="video"><img id="video" alt=""><span class="ph" id="video-ph">Esperando vídeo…</span></div>
+    </div>
+    <div class="card current">
+      <h2>Vehículo actual <span class="meta" id="cur-meta">sin sesión</span><span class="right" id="cur-badge"></span></h2>
+      <div class="crop-box" id="cur-crop"><span class="ph">Recorte que ve el OCR</span></div>
+      <div class="plate" id="cur-plate">—</div>
+      <div class="meters">
+        <div class="meter">
+          <div class="row"><span>Confianza detector</span><b id="m-det">—</b></div>
+          <div class="bar"><div class="fill" id="m-det-f" style="background:var(--s-detect);width:0"></div><div class="thr" id="m-det-t"></div></div>
+        </div>
+        <div class="meter">
+          <div class="row"><span>Confianza OCR</span><b id="m-ocr">—</b></div>
+          <div class="bar"><div class="fill" id="m-ocr-f" style="background:var(--s-ocr);width:0"></div><div class="thr" id="m-ocr-t"></div></div>
+        </div>
+        <div class="meter">
+          <div class="row"><span>Frames en voting</span><b id="m-vot">—</b></div>
+          <div class="bar"><div class="fill" id="m-vot-f" style="background:var(--s-validate);width:0"></div></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--ink-2);margin-bottom:5px">Voting (peso acumulado = suma de confianzas)</div>
+        <div class="votes" id="cur-votes"><span class="empty">Sin votos</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid g-2b">
+    <div class="card">
+      <h2>Tiempos por frame procesado <span class="meta">ms · últimos 120</span></h2>
+      <div class="chart" id="ch-times"><canvas></canvas><div class="tip"></div></div>
+      <div class="legend">
+        <span><i style="background:var(--s-detect)"></i>Detector</span>
+        <span><i style="background:var(--s-ocr)"></i>OCR</span>
+        <span><i style="background:var(--s-validate)"></i>Validator + guardado</span>
+      </div>
+      <div class="scroll short" style="margin-top:10px">
+        <table>
+          <thead><tr><th>Etapa (ms)</th><th class="n">Último</th><th class="n">Media</th><th class="n">p50</th><th class="n">p95</th><th class="n">Máx</th><th class="n">n</th></tr></thead>
+          <tbody id="t-timings"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Confianzas <span class="meta">últimos 120 frames procesados · línea discontinua = umbral</span></h2>
+      <div class="chart" id="ch-conf"><canvas></canvas><div class="tip"></div></div>
+      <div class="legend">
+        <span><i class="line" style="background:var(--s-detect)"></i>Detector</span>
+        <span><i class="line" style="background:var(--s-ocr)"></i>OCR</span>
+      </div>
+      <div class="scroll short" style="margin-top:10px">
+        <table>
+          <thead><tr><th>Contador</th><th class="n">Valor</th><th>Contador</th><th class="n">Valor</th></tr></thead>
+          <tbody id="t-counters"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom:12px">
+    <h2>Pasos de vehículo <span class="meta">una sesión = frames seguidos con matrícula detectada</span>
+      <span class="right">
+        <label class="chk"><input type="checkbox" id="f-short" checked> Ocultar sesiones de 1 frame</label>
+        <button id="btn-csv">Exportar CSV</button>
+        <button id="btn-json">Exportar JSON</button>
+      </span>
+    </h2>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Hora</th><th>Recorte</th><th>Resultado</th><th>Matrícula</th><th>Real</th>
+          <th class="n">T. lectura</th><th class="n">Duración</th><th class="n">Frames</th><th class="n">Lecturas OCR</th>
+          <th class="n">Conf. det</th><th>Lecturas más frecuentes</th>
+        </tr></thead>
+        <tbody id="t-sessions"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Registro de frames procesados <span class="meta" id="log-meta">últimos 200</span>
+      <span class="right"><label class="chk"><input type="checkbox" id="f-det"> Solo con detección</label></span>
+    </h2>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Hora</th><th class="n">Frame</th><th class="n">Sesión</th><th class="n">Conf. det</th><th>Bbox (px)</th>
+          <th>OCR</th><th class="n">Conf. OCR</th><th>Decisión</th>
+          <th class="n">Lectura</th><th class="n">Detector</th><th class="n">OCR</th><th class="n">Valid.</th><th class="n">Total</th>
+        </tr></thead>
+        <tbody id="t-log"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="modal"><img alt=""></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ── Conexión ────────────────────────────────────────────────────────────────
+  // Por defecto usa el mismo host que sirve la página (http://IP_RPI:8000/debug).
+  // Se puede apuntar a otra RPi con ?host=192.168.1.50:8000
+  const params = new URLSearchParams(location.search);
+  const HOST = params.get('host') || (location.protocol.startsWith('http') ? location.host : 'localhost:8000');
+  const HTTP = `${location.protocol === 'https:' ? 'https' : 'http'}://${HOST}`;
+  const WS = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${HOST}`;
+
+  const MAX_POINTS = 120;
+  const MAX_LOG = 200;
+  const $ = (id) => document.getElementById(id);
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  const st = {
+    frames: [],           // eventos de frame (ventana de las gráficas)
+    sessions: new Map(),  // id -> sesión cerrada
+    live: null,           // sesión en curso
+    stats: null,
+    paused: false,
+    lastCrop: null,
+    serverStart: null,
+  };
+
+  const safe = (fn) => { try { return fn(); } catch (e) { return null; } };
+  const store = {
+    get: (k, d) => safe(() => JSON.parse(localStorage.getItem(k))) ?? d,
+    set: (k, v) => safe(() => localStorage.setItem(k, JSON.stringify(v))),
+  };
+  let truths = store.get('rama-debug-truths', {});
+
+  // ── Utilidades de formato ───────────────────────────────────────────────────
+  const fmtMs = (v) => v == null ? '—' : (v >= 1000 ? (v / 1000).toFixed(2) + ' s' : Math.round(v) + ' ms');
+  const fmtNum = (v, d = 1) => v == null ? '—' : Number(v).toFixed(d);
+  const fmtConf = (v) => v == null ? '—' : Number(v).toFixed(2);
+  const fmtTime = (ts) => ts ? new Date(ts * 1000).toLocaleTimeString('es-ES', { hour12: false }) +
+    '.' + String(Math.floor((ts % 1) * 1000)).padStart(3, '0') : '—';
+  const fmtClock = (ts) => ts ? new Date(ts * 1000).toLocaleTimeString('es-ES', { hour12: false }) : '—';
+  const fmtUptime = (s) => {
+    if (s == null) return '—';
+    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+    return h ? `${h}h ${m}m` : m ? `${m}m ${ss}s` : `${ss}s`;
+  };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const imgSrc = (b64) => b64 ? `data:image/jpeg;base64,${b64}` : '';
+  const sessionKey = (s) => `${Math.round(s.start * 1000)}`;
+
+  const DECISION_LABEL = {
+    aceptada: 'Aceptada', acumulando: 'Acumulando', sin_consenso: 'Sin consenso',
+    baja_confianza: 'Baja confianza', cooldown: 'Cooldown', ocr_vacio: 'OCR vacío',
+    sin_deteccion: 'Sin detección', leida: 'Leída', perdida: 'Perdida',
+  };
+  const badge = (key) => key ? `<span class="badge b-${esc(key)}">${esc(DECISION_LABEL[key] || key)}</span>` : '';
+  const frameDecision = (f) => !f.detected ? 'sin_deteccion' : !f.ocr_text ? 'ocr_vacio' : (f.validator?.decision || null);
+
+  // ── WebSocket de telemetría ─────────────────────────────────────────────────
+  let wsDebug = null, debugRetry = 1000;
+  function connectDebug() {
+    setDot('dot-ws', 'warn'); $('lbl-ws').textContent = 'Telemetría: conectando…';
+    wsDebug = new WebSocket(`${WS}/ws/debug`);
+    wsDebug.onopen = () => { debugRetry = 1000; setDot('dot-ws', 'ok'); $('lbl-ws').textContent = 'Telemetría'; };
+    wsDebug.onmessage = (m) => { const msg = safe(() => JSON.parse(m.data)); if (msg) handle(msg); };
+    wsDebug.onclose = () => {
+      setDot('dot-ws', 'ko'); $('lbl-ws').textContent = 'Telemetría: desconectada';
+      setTimeout(connectDebug, debugRetry); debugRetry = Math.min(debugRetry * 2, 10000);
+    };
+    wsDebug.onerror = () => wsDebug.close();
+  }
+
+  function handle(msg) {
+    const d = msg.data;
+    switch (msg.type) {
+      case 'snapshot':
+        st.frames = (d.frames || []).slice(-MAX_POINTS);
+        st.sessions = new Map((d.sessions || []).map((s) => [s.id, s]));
+        st.live = d.stats?.open_session || null;
+        $('t-log').innerHTML = '';
+        (d.frames || []).slice(-MAX_LOG).forEach(addLogRow);
+        onStats(d.stats);
+        renderSessions(); renderCurrent(st.frames[st.frames.length - 1]); scheduleCharts();
+        break;
+      case 'frame': onFrame(d); break;
+      case 'session_live': st.live = d; renderCurrentSession(); break;
+      case 'session':
+        st.sessions.set(d.id, d);
+        if (st.live && st.live.id === d.id) st.live = null;
+        renderSessions(); renderCurrentSession(); renderKpis();
+        break;
+      case 'stats': onStats(d); break;
+    }
+  }
+
+  function onFrame(f) {
+    if (f.crop) st.lastCrop = f.crop;
+    if (st.paused) return;
+    st.frames.push(f);
+    if (st.frames.length > MAX_POINTS) st.frames.shift();
+    addLogRow(f);
+    renderCurrent(f);
+    scheduleCharts();
+  }
+
+  function onStats(s) {
+    if (!s) return;
+    if (st.serverStart != null && s.uptime_s < st.serverStart) {
+      // El servidor se reinició o alguien pulsó reset
+      st.sessions.clear(); renderSessions();
+    }
+    st.serverStart = s.uptime_s;
+    st.stats = s;
+    st.live = s.open_session || (st.live && st.live.end == null ? st.live : null);
+    renderHeader(); renderKpis(); renderTimings(); renderCounters(); renderCurrentSession();
+    scheduleCharts();
+  }
+
+  // ── Vídeo (/ws/camera, frames JPG en binario) ───────────────────────────────
+  let wsCam = null, camRetry = 1000, videoOn = store.get('rama-debug-video', true), lastUrl = null;
+  let camFrames = 0, camLastTick = performance.now();
+  function connectCam() {
+    if (!videoOn) return;
+    wsCam = new WebSocket(`${WS}/ws/camera`);
+    wsCam.binaryType = 'blob';
+    wsCam.onopen = () => { camRetry = 1000; $('video-ph').textContent = 'Esperando vídeo…'; };
+    wsCam.onmessage = (m) => {
+      const url = URL.createObjectURL(m.data);
+      $('video').src = url;
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      lastUrl = url;
+      $('video-ph').style.display = 'none';
+      camFrames++;
+    };
+    wsCam.onclose = () => {
+      $('video-ph').style.display = ''; $('video-ph').textContent = videoOn ? 'Vídeo desconectado, reintentando…' : 'Vídeo desactivado';
+      if (videoOn) { setTimeout(connectCam, camRetry); camRetry = Math.min(camRetry * 2, 10000); }
+    };
+    wsCam.onerror = () => wsCam.close();
+  }
+  setInterval(() => {
+    const now = performance.now();
+    const fps = camFrames * 1000 / (now - camLastTick);
+    camFrames = 0; camLastTick = now;
+    $('video-meta').textContent = videoOn ? `/ws/camera · ${fps.toFixed(1)} fps recibidos` : 'desactivado';
+  }, 2000);
+  function setVideo(on) {
+    videoOn = on; store.set('rama-debug-video', on);
+    $('btn-video').classList.toggle('on', on);
+    if (on) connectCam();
+    else { if (wsCam) wsCam.close(); $('video').removeAttribute('src'); $('video-ph').style.display = ''; $('video-ph').textContent = 'Vídeo desactivado'; }
+  }
+
+  // ── Render: cabecera y KPIs ─────────────────────────────────────────────────
+  function setDot(id, cls) { const el = $(id); el.className = 'dot' + (cls ? ' ' + cls : ''); }
+
+  function renderHeader() {
+    const s = st.stats; if (!s) return;
+    const c = s.config || {};
+    $('hdr-sub').textContent = `${c.camera_id || ''} · ${c.backend || '?'} · ${c.country || ''} · activo ${fmtUptime(s.uptime_s)}`;
+    setDot('dot-cam', s.system.camera_connected ? 'ok' : 'ko');
+    setDot('dot-eq', s.system.eqbroker_connected ? 'ok' : 'ko');
+    const parts = [];
+    if (s.system.cpu_temp != null) parts.push(`CPU ${s.system.cpu_temp} °C`);
+    if (s.system.load_avg) parts.push(`carga ${s.system.load_avg.map((v) => v.toFixed(2)).join(' ')}`);
+    const q = s.system.queues || {};
+    Object.keys(q).forEach((k) => parts.push(`cola ${k} ${q[k]}`));
+    $('pill-sys').textContent = parts.join(' · ') || '—';
+    $('pill-sys').style.color = s.system.cpu_temp >= 80 ? 'var(--critical)' : '';
+  }
+
+  function closedSessions() { return [...st.sessions.values()]; }
+
+  function renderKpis() {
+    const s = st.stats;
+    if (s) {
+      $('k-fps').innerHTML = `${fmtNum(s.fps_camera)} <small>/ ${fmtNum(s.fps_processed)}</small>`;
+      $('k-fps-h').textContent = `frame_skip ${s.config?.frame_skip ?? '—'} · nulos ${s.counters?.frames_nulos || 0}`;
+      const t = s.timings?.total;
+      $('k-lat').innerHTML = t ? `${fmtMs(t.avg)}` : '—';
+      $('k-lat-h').textContent = t ? `p50 ${fmtMs(t.p50)} · p95 ${fmtMs(t.p95)} · máx ${fmtMs(t.max)}` : 'p50 · p95';
+      const ttr = s.timings?.time_to_read;
+      $('k-ttr').innerHTML = ttr ? fmtMs(ttr.avg) : '—';
+      $('k-ttr-h').textContent = ttr ? `p50 ${fmtMs(ttr.p50)} · p95 ${fmtMs(ttr.p95)} · n ${ttr.n}` : 'media desde 1ª detección';
+      const r = s.timings?.read;
+      $('k-read').innerHTML = r ? fmtMs(r.avg) : '—';
+      $('k-read-h').textContent = r ? `p95 ${fmtMs(r.p95)} · máx ${fmtMs(r.max)}` : 'tiempo de camera.read_frame';
+    }
+    const minFrames = $('f-short').checked ? 2 : 1;
+    const ss = closedSessions().filter((x) => x.frames >= minFrames);
+    const ok = ss.filter((x) => x.result === 'leida').length;
+    const lost = ss.filter((x) => x.result === 'perdida').length;
+    $('k-rate').innerHTML = ok + lost ? `${Math.round(ok * 100 / (ok + lost))}% <small>${ok}/${ok + lost}</small>` : '—';
+    $('k-rate-h').textContent = `${lost} perdidas · ${ss.filter((x) => x.result === 'cooldown').length} en cooldown`;
+    const marked = ss.filter((x) => truths[sessionKey(x)]);
+    const hits = marked.filter((x) => x.plate && norm(x.plate) === norm(truths[sessionKey(x)])).length;
+    $('k-acc').innerHTML = marked.length ? `${Math.round(hits * 100 / marked.length)}% <small>${hits}/${marked.length}</small>` : '—';
+  }
+
+  const STAGES = [
+    ['read', 'Lectura cámara'], ['detect', 'Detector'], ['ocr', 'OCR'],
+    ['validate', 'Validator'], ['store', 'Fingerprint + guardado'], ['total', 'Total frame'],
+    ['time_to_read', 'Hasta lectura (por vehículo)'],
+  ];
+  function renderTimings() {
+    const t = st.stats?.timings || {};
+    $('t-timings').innerHTML = STAGES.map(([k, label]) => {
+      const v = t[k];
+      return `<tr><td>${label}</td>${v ? `<td class="n">${fmtNum(v.last)}</td><td class="n">${fmtNum(v.avg)}</td><td class="n">${fmtNum(v.p50)}</td><td class="n">${fmtNum(v.p95)}</td><td class="n">${fmtNum(v.max)}</td><td class="n">${v.n}</td>`
+        : '<td class="n dim" colspan="6">sin datos</td>'}</tr>`;
+    }).join('');
+  }
+
+  const COUNTERS = [
+    ['frames_leidos', 'Frames leídos'], ['frames_nulos', 'Frames nulos'],
+    ['frames_procesados', 'Frames procesados'], ['detecciones', 'Con matrícula detectada'],
+    ['ocr_ok', 'OCR con texto'], ['ocr_vacio', 'OCR vacío'],
+    ['decision_baja_confianza', 'Descartes baja confianza'], ['decision_acumulando', 'Votos acumulando'],
+    ['decision_sin_consenso', 'Sin consenso'], ['decision_cooldown', 'Bloqueos cooldown'],
+    ['decision_aceptada', 'Aceptadas'], ['sesiones_leida', 'Sesiones leídas'],
+    ['sesiones_perdida', 'Sesiones perdidas'], ['sesiones_cooldown', 'Sesiones en cooldown'],
+  ];
+  function renderCounters() {
+    const c = st.stats?.counters || {};
+    const rows = [];
+    for (let i = 0; i < COUNTERS.length; i += 2) {
+      const a = COUNTERS[i], b = COUNTERS[i + 1];
+      rows.push(`<tr><td>${a[1]}</td><td class="n">${c[a[0]] || 0}</td><td>${b ? b[1] : ''}</td><td class="n">${b ? (c[b[0]] || 0) : ''}</td></tr>`);
+    }
+    $('t-counters').innerHTML = rows.join('');
+  }
+
+  // ── Render: vehículo actual ─────────────────────────────────────────────────
+  function setMeter(id, value, thr, max = 1) {
+    $(id).textContent = value == null ? '—' : fmtConf(value);
+    $(id + '-f').style.width = value == null ? '0' : `${Math.min(100, value * 100 / max)}%`;
+    const t = $(id + '-t');
+    if (t) { t.style.display = thr == null ? 'none' : ''; t.style.left = `calc(${thr * 100}% - 1px)`; }
+  }
+
+  function renderCurrent(f) {
+    const cfg = st.stats?.config || {};
+    if (!f) return;
+    if (f.crop) $('cur-crop').innerHTML = `<img src="${imgSrc(f.crop)}" alt="recorte">`;
+    const dec = frameDecision(f);
+    $('cur-badge').innerHTML = badge(dec);
+    setMeter('m-det', f.detected ? f.det_conf : null, cfg.detection_threshold);
+    setMeter('m-ocr', f.ocr_conf ?? null, cfg.ocr_threshold);
+    if (f.detected) {
+      const v = f.validator;
+      const txt = v?.text || f.ocr_text;
+      $('cur-plate').innerHTML = txt
+        ? `${esc(txt)} ${f.ocr_text && v?.text && norm(v.text) !== norm(f.ocr_text) ? `<small>OCR: ${esc(f.ocr_text)}</small>` : ''}`
+        : '<small>OCR sin lectura</small>';
+    } else {
+      $('cur-plate').innerHTML = '<small>Sin matrícula en el frame (recorte = último visto)</small>';
+    }
+    if (f.validator) renderVotes(f.validator);
+    else if (!f.detected) renderVotes(null);
+  }
+
+  function renderVotes(v) {
+    const need = v?.frames_needed ?? st.stats?.config?.frames_for_voting ?? 0;
+    const cnt = v ? (v.decision === 'aceptada' ? v.frame_count : v.frame_count) : 0;
+    $('m-vot').textContent = `${cnt} / ${need}`;
+    $('m-vot-f').style.width = need ? `${Math.min(100, cnt * 100 / need)}%` : '0';
+    const votes = v?.votes ? Object.entries(v.votes).sort((a, b) => b[1] - a[1]) : [];
+    if (!votes.length) { $('cur-votes').innerHTML = '<span class="empty">Sin votos</span>'; return; }
+    const max = votes[0][1] || 1;
+    $('cur-votes').innerHTML = votes.slice(0, 6).map(([t, w]) =>
+      `<div class="vote ${v.winner === t ? 'win' : ''}"><span class="t" title="${esc(t)}">${esc(t)}</span>
+       <div class="bar"><div class="fill" style="width:${w * 100 / max}%"></div></div><span class="w">${w.toFixed(2)}</span></div>`).join('') +
+      (votes.length > 6 ? `<span class="empty">+${votes.length - 6} lecturas más</span>` : '');
+  }
+
+  function renderCurrentSession() {
+    const s = st.live;
+    if (!s) { $('cur-meta').textContent = 'sin sesión'; return; }
+    const elapsed = st.stats ? Math.max(0, Math.round((Date.now() / 1000 - s.start) * 1000)) : null;
+    $('cur-meta').textContent = `sesión #${s.id} · ${s.frames} frames · ${fmtMs(elapsed)}` +
+      (s.plate ? ` · leída ${s.plate} en ${fmtMs(s.time_to_read_ms)}` : '');
+  }
+
+  // ── Render: sesiones ────────────────────────────────────────────────────────
+  function renderSessions() {
+    const minFrames = $('f-short').checked ? 2 : 1;
+    const list = closedSessions().filter((s) => s.frames >= minFrames).sort((a, b) => b.id - a.id);
+    $('t-sessions').innerHTML = list.length ? list.map((s) => {
+      const key = sessionKey(s), truth = truths[key] || '';
+      let cmp = '';
+      if (truth) cmp = s.plate && norm(s.plate) === norm(truth) ? '<span class="ok-ink" title="Correcta">✓</span>' : '<span class="ko-ink" title="Incorrecta">✗</span>';
+      const reads = (s.readings || []).map((r) => `<span class="mono">${esc(r.text)}</span> <span class="dim">×${r.n} (${fmtConf(r.conf_avg)})</span>`).join(', ');
+      return `<tr>
+        <td class="n">${s.id}</td><td>${fmtClock(s.start)}</td>
+        <td>${s.best_crop ? `<img class="thumb" src="${imgSrc(s.best_crop)}" alt="">` : '<span class="dim">—</span>'}</td>
+        <td>${badge(s.result)}</td>
+        <td class="mono">${esc(s.plate || '—')}</td>
+        <td><input class="truth" data-key="${key}" value="${esc(truth)}" placeholder="real" spellcheck="false"> ${cmp}</td>
+        <td class="n">${fmtMs(s.time_to_read_ms)}</td><td class="n">${fmtMs(s.duration_ms)}</td>
+        <td class="n">${s.frames_to_read != null ? `${s.frames_to_read}/` : ''}${s.frames}</td>
+        <td class="n">${s.ocr_reads} <span class="dim">(${s.n_distinct_readings} dist.)</span></td>
+        <td class="n">${fmtConf(s.best_det_conf)}</td>
+        <td>${reads || '<span class="dim">—</span>'}</td></tr>`;
+    }).join('') : '<tr><td colspan="12" class="dim">Aún no ha pasado ningún vehículo.</td></tr>';
+    renderKpis();
+  }
+
+  $('t-sessions').addEventListener('change', (e) => {
+    if (!e.target.matches('input.truth')) return;
+    const v = norm(e.target.value);
+    if (v) truths[e.target.dataset.key] = v; else delete truths[e.target.dataset.key];
+    store.set('rama-debug-truths', truths);
+    renderSessions();
+  });
+  $('t-sessions').addEventListener('keydown', (e) => {
+    if (e.target.matches('input.truth') && e.key === 'Enter') e.target.blur();
+  });
+
+  // ── Render: registro de frames ──────────────────────────────────────────────
+  function addLogRow(f) {
+    const tb = $('t-log');
+    const dec = frameDecision(f);
+    const tr = document.createElement('tr');
+    tr.dataset.det = f.detected ? '1' : '0';
+    if (!f.detected && $('f-det').checked) tr.style.display = 'none';
+    const valMs = (f.t_validate_ms || 0) + (f.t_store_ms || 0);
+    tr.innerHTML = `<td>${fmtTime(f.ts)}</td><td class="n">${f.frame_id}</td><td class="n">${f.session_id ?? '<span class="dim">—</span>'}</td>
+      <td class="n">${f.detected ? fmtConf(f.det_conf) : '<span class="dim">—</span>'}</td>
+      <td class="dim">${f.bbox ? `${f.bbox.join(',')} <span>(${f.crop_wh?.join('×')})</span>` : ''}</td>
+      <td class="mono">${esc(f.validator?.text || f.ocr_text || '')}</td>
+      <td class="n">${f.ocr_conf != null ? fmtConf(f.ocr_conf) : ''}</td>
+      <td>${badge(dec)}</td>
+      <td class="n">${fmtNum(f.t_read_ms)}</td><td class="n">${fmtNum(f.t_detect_ms)}</td>
+      <td class="n">${f.t_ocr_ms != null ? fmtNum(f.t_ocr_ms) : ''}</td>
+      <td class="n">${f.t_validate_ms != null ? fmtNum(valMs, 2) : ''}</td>
+      <td class="n"><b>${fmtNum(f.t_total_ms)}</b></td>`;
+    tb.insertBefore(tr, tb.firstChild);
+    while (tb.children.length > MAX_LOG) tb.removeChild(tb.lastChild);
+  }
+  $('f-det').addEventListener('change', () => {
+    const only = $('f-det').checked;
+    for (const tr of $('t-log').children) tr.style.display = only && tr.dataset.det === '0' ? 'none' : '';
+  });
+
+  // ── Gráficas (canvas, sin librerías) ────────────────────────────────────────
+  let chartsQueued = false;
+  function scheduleCharts() {
+    if (chartsQueued) return;
+    chartsQueued = true;
+    requestAnimationFrame(() => { chartsQueued = false; drawTimes(); drawConf(); });
+  }
+
+  function setupCanvas(box) {
+    const cv = box.querySelector('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    return { ctx, w, h };
+  }
+
+  const PAD = { l: 40, r: 10, t: 8, b: 18 };
+  function niceMax(v) {
+    if (v <= 0) return 10;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+    return 10 * p;
+  }
+  function drawGrid(ctx, w, h, max, ticks, fmt) {
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillStyle = css('--muted'); ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let i = 0; i <= ticks; i++) {
+      const v = max * i / ticks;
+      const y = Math.round(PAD.t + (h - PAD.t - PAD.b) * (1 - i / ticks)) + 0.5;
+      ctx.strokeStyle = i === 0 ? css('--axis') : css('--grid'); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(w - PAD.r, y); ctx.stroke();
+      ctx.fillText(fmt(v), PAD.l - 6, y);
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('← más antiguo', PAD.l, h - PAD.b + 4);
+    ctx.textAlign = 'right';
+    ctx.fillText('ahora →', w - PAD.r, h - PAD.b + 4);
+  }
+  function roundTop(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h);
+    ctx.beginPath();
+    ctx.moveTo(x, y + h); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h); ctx.closePath(); ctx.fill();
+  }
+
+  // Tiempos: barras apiladas detector / OCR / validator por frame
+  function timesSeries() {
+    return st.frames.map((f) => ({
+      f, d: f.t_detect_ms || 0, o: f.t_ocr_ms || 0, v: (f.t_validate_ms || 0) + (f.t_store_ms || 0),
+    }));
+  }
+  function drawTimes() {
+    const box = $('ch-times');
+    const { ctx, w, h } = setupCanvas(box);
+    const data = timesSeries();
+    const max = niceMax(Math.max(10, ...data.map((p) => p.d + p.o + p.v)));
+    drawGrid(ctx, w, h, max, 4, (v) => Math.round(v));
+    const plotW = w - PAD.l - PAD.r, plotH = h - PAD.t - PAD.b;
+    const slot = plotW / MAX_POINTS;
+    const bw = Math.max(1, slot - 2);
+    const off = MAX_POINTS - data.length;
+    const colors = [css('--s-detect'), css('--s-ocr'), css('--s-validate')];
+    data.forEach((p, i) => {
+      const x = PAD.l + (off + i) * slot + (slot - bw) / 2;
+      let base = PAD.t + plotH;
+      const segs = [p.d, p.o, p.v];
+      const lastIdx = segs.map((v) => v > 0).lastIndexOf(true);
+      segs.forEach((v, k) => {
+        if (v <= 0) return;
+        const hh = v / max * plotH;
+        const gap = k > 0 && bw > 4 ? 1 : 0;  // separador de 2px entre segmentos en barras anchas
+        ctx.fillStyle = colors[k];
+        if (k === lastIdx && bw > 4) roundTop(ctx, x, base - hh, bw, hh - gap, 2);
+        else ctx.fillRect(x, base - hh, bw, Math.max(0, hh - gap));
+        base -= hh;
+      });
+      if (hover.times === i) {
+        ctx.fillStyle = css('--ink'); ctx.globalAlpha = 0.08;
+        ctx.fillRect(PAD.l + (off + i) * slot, PAD.t, slot, plotH); ctx.globalAlpha = 1;
+      }
+    });
+  }
+
+  // Confianzas: dos líneas en el mismo eje 0-1 + umbrales.
+  // Un OCR sin texto deja hueco en la línea en vez de caer a 0.
+  const confOf = (f, key) => !f.detected ? null : (key === 'ocr_conf' && !f.ocr_text ? null : f[key]);
+  function drawConf() {
+    const box = $('ch-conf');
+    const { ctx, w, h } = setupCanvas(box);
+    drawGrid(ctx, w, h, 1, 4, (v) => v.toFixed(2));
+    const cfg = st.stats?.config || {};
+    const plotW = w - PAD.l - PAD.r, plotH = h - PAD.t - PAD.b;
+    const slot = plotW / MAX_POINTS;
+    const off = MAX_POINTS - st.frames.length;
+    const X = (i) => PAD.l + (off + i) * slot + slot / 2;
+    const Y = (v) => PAD.t + plotH * (1 - v);
+
+    [[cfg.detection_threshold, '--s-detect'], [cfg.ocr_threshold, '--s-ocr']].forEach(([thr, col]) => {
+      if (thr == null) return;
+      ctx.strokeStyle = css(col); ctx.globalAlpha = 0.7; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD.l, Y(thr) + 0.5); ctx.lineTo(w - PAD.r, Y(thr) + 0.5); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    });
+
+    const series = [['det_conf', '--s-detect'], ['ocr_conf', '--s-ocr']];
+    series.forEach(([key, col]) => {
+      ctx.strokeStyle = css(col); ctx.lineWidth = 2; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      let pen = false;
+      st.frames.forEach((f, i) => {
+        const v = confOf(f, key);
+        if (v == null) { pen = false; return; }
+        if (!pen) { ctx.moveTo(X(i), Y(v)); pen = true; } else ctx.lineTo(X(i), Y(v));
+      });
+      ctx.stroke();
+      // Puntos sueltos (frames aislados) para que no desaparezcan
+      st.frames.forEach((f, i) => {
+        const v = confOf(f, key);
+        if (v == null) return;
+        const prev = st.frames[i - 1], next = st.frames[i + 1];
+        const isolated = !(prev && confOf(prev, key) != null) && !(next && confOf(next, key) != null);
+        if (isolated || hover.conf === i) {
+          ctx.fillStyle = css(col); ctx.strokeStyle = css('--surface'); ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(X(i), Y(v), 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+      });
+    });
+    // Frames sin detección marcados en la base
+    ctx.fillStyle = css('--axis');
+    st.frames.forEach((f, i) => { if (!f.detected) ctx.fillRect(X(i) - 1, PAD.t + plotH - 4, 2, 4); });
+
+    if (hover.conf != null && st.frames[hover.conf]) {
+      ctx.strokeStyle = css('--muted'); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(X(hover.conf) + 0.5, PAD.t); ctx.lineTo(X(hover.conf) + 0.5, PAD.t + plotH); ctx.stroke();
+    }
+  }
+
+  // Hover / tooltips
+  const hover = { times: null, conf: null };
+  function bindHover(boxId, key, tipHtml) {
+    const box = $(boxId), tip = box.querySelector('.tip'), cv = box.querySelector('canvas');
+    const update = (clientX, clientY) => {
+      const r = cv.getBoundingClientRect();
+      const x = clientX - r.left;
+      const slot = (r.width - PAD.l - PAD.r) / MAX_POINTS;
+      const off = MAX_POINTS - st.frames.length;
+      const i = Math.floor((x - PAD.l) / slot) - off;
+      if (i < 0 || i >= st.frames.length || x < PAD.l) { hide(); return; }
+      hover[key] = i;
+      tip.innerHTML = tipHtml(st.frames[i]);
+      tip.style.display = 'block';
+      const tw = tip.offsetWidth;
+      let left = x + 12;
+      if (left + tw > r.width) left = x - tw - 12;
+      tip.style.left = `${Math.max(0, left)}px`;
+      tip.style.top = `${Math.max(0, clientY - r.top - 20)}px`;
+      scheduleCharts();
+    };
+    const hide = () => { tip.style.display = 'none'; if (hover[key] != null) { hover[key] = null; scheduleCharts(); } };
+    cv.addEventListener('mousemove', (e) => update(e.clientX, e.clientY));
+    cv.addEventListener('mouseleave', hide);
+    cv.addEventListener('touchstart', (e) => { const t = e.touches[0]; update(t.clientX, t.clientY); }, { passive: true });
+  }
+  const sw = (v) => `<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(${v});margin-right:4px"></i>`;
+  bindHover('ch-times', 'times', (f) =>
+    `<div><b>Frame ${f.frame_id}</b> <span class="k">${fmtTime(f.ts)}</span></div>
+     <div>${sw('--s-detect')}<span class="k">Detector</span> <b>${fmtNum(f.t_detect_ms)} ms</b></div>
+     <div>${sw('--s-ocr')}<span class="k">OCR</span> <b>${f.t_ocr_ms != null ? fmtNum(f.t_ocr_ms) + ' ms' : '—'}</b></div>
+     <div>${sw('--s-validate')}<span class="k">Validator + guardado</span> <b>${f.t_validate_ms != null ? fmtNum((f.t_validate_ms || 0) + (f.t_store_ms || 0), 2) + ' ms' : '—'}</b></div>
+     <div><span class="k">Total</span> <b>${fmtNum(f.t_total_ms)} ms</b> · <span class="k">lectura</span> <b>${fmtNum(f.t_read_ms)} ms</b></div>`);
+  bindHover('ch-conf', 'conf', (f) =>
+    `<div><b>Frame ${f.frame_id}</b> <span class="k">${fmtTime(f.ts)}</span></div>
+     ${f.detected ? `<div>${sw('--s-detect')}<span class="k">Detector</span> <b>${fmtConf(f.det_conf)}</b></div>
+     <div>${sw('--s-ocr')}<span class="k">OCR</span> <b>${fmtConf(f.ocr_conf)}</b> <span class="k">${esc(f.validator?.text || f.ocr_text || '')}</span></div>
+     <div><span class="k">Decisión</span> <b>${esc(DECISION_LABEL[frameDecision(f)] || '—')}</b></div>` : '<div class="k">Sin detección</div>'}`);
+
+  // ── Exportar ────────────────────────────────────────────────────────────────
+  function download(name, text, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  function exportRows() {
+    return closedSessions().sort((a, b) => a.id - b.id).map((s) => {
+      const truth = truths[sessionKey(s)] || '';
+      return {
+        id: s.id, inicio: new Date(s.start * 1000).toISOString(), resultado: s.result,
+        matricula: s.plate || '', real: truth,
+        correcta: truth ? (s.plate && norm(s.plate) === norm(truth) ? 'si' : 'no') : '',
+        t_lectura_ms: s.time_to_read_ms ?? '', duracion_ms: s.duration_ms, frames: s.frames,
+        frames_hasta_lectura: s.frames_to_read ?? '', lecturas_ocr: s.ocr_reads,
+        lecturas_distintas: s.n_distinct_readings, conf_det_max: s.best_det_conf,
+        conf_ocr_aceptada: s.accepted_conf ?? '',
+        lecturas: (s.readings || []).map((r) => `${r.text}x${r.n}`).join(' '),
+      };
+    });
+  }
+  $('btn-csv').onclick = () => {
+    const rows = exportRows();
+    if (!rows.length) return;
+    const cols = Object.keys(rows[0]);
+    const q = (v) => /[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
+    download(`rama-sesiones-${stamp()}.csv`, [cols.join(';'), ...rows.map((r) => cols.map((c) => q(r[c])).join(';'))].join('\n'), 'text/csv');
+  };
+  $('btn-json').onclick = () => {
+    const data = { exportado: new Date().toISOString(), stats: st.stats, sesiones: closedSessions().map((s) => ({ ...s, real: truths[sessionKey(s)] || null })) };
+    download(`rama-depuracion-${stamp()}.json`, JSON.stringify(data, null, 2), 'application/json');
+  };
+
+  // ── Controles ───────────────────────────────────────────────────────────────
+  $('btn-pause').onclick = () => {
+    st.paused = !st.paused;
+    $('btn-pause').textContent = st.paused ? 'Reanudar' : 'Pausar';
+    $('btn-pause').classList.toggle('on', st.paused);
+  };
+  $('btn-reset').onclick = async () => {
+    if (!confirm('¿Poner a cero contadores y sesiones en el servidor? Las matrículas reales marcadas se conservan.')) return;
+    try {
+      await fetch(`${HTTP}/api/debug/reset`, { method: 'POST' });
+      st.frames = []; st.sessions.clear(); st.live = null; st.serverStart = null;
+      $('t-log').innerHTML = ''; renderSessions(); scheduleCharts();
+    } catch (e) { alert('No se pudo resetear: ' + e); }
+  };
+  $('btn-video').onclick = () => setVideo(!videoOn);
+  $('f-short').onchange = () => renderSessions();
+  const themes = [null, 'dark', 'light'];
+  let theme = store.get('rama-debug-theme', null);
+  const applyTheme = () => {
+    if (theme) document.documentElement.dataset.theme = theme; else delete document.documentElement.dataset.theme;
+    $('btn-theme').textContent = `Tema: ${theme === 'dark' ? 'oscuro' : theme === 'light' ? 'claro' : 'auto'}`;
+    scheduleCharts();
+  };
+  $('btn-theme').onclick = () => { theme = themes[(themes.indexOf(theme) + 1) % themes.length]; store.set('rama-debug-theme', theme); applyTheme(); };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', scheduleCharts);
+  window.addEventListener('resize', scheduleCharts);
+
+  document.addEventListener('click', (e) => {
+    if (e.target.matches('img.thumb, #cur-crop img')) {
+      $('modal').querySelector('img').src = e.target.src; $('modal').classList.add('show');
+    } else if (e.target.closest('#modal')) $('modal').classList.remove('show');
+  });
+  setInterval(renderCurrentSession, 500);
+
+  applyTheme();
+  setVideo(videoOn);
+  renderTimings(); renderCounters(); renderSessions();
+  connectDebug();
+})();
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ class Validator:
       self.votes = {}        # { "6630FGV": 1.87 }
       self.cooldown = {}     # { "6630FGV": timestamp }
       self.frame_count = 0
+      self.last_decision = None  # motivo de la última decisión (para el dashboard de depuración)
 
   def validate(self, texto, confianza, vehiculo_presente=True):
       """
@@ -32,6 +33,7 @@ class Validator:
       # Capa 1: filtro threshold
       if confianza < config['ocr']['threshold']:
           logger.debug(f"Lectura descartada por confianza baja: {confianza:.2f}")
+          self._set_decision('baja_confianza', texto)
           return None
 
       # Capa 2: limpieza
@@ -48,21 +50,44 @@ class Validator:
 
       # ¿Tenemos suficientes frames?
       if self.frame_count < config['detection']['frames_for_voting']:
+          self._set_decision('acumulando', texto)
           return None
 
       # Capa 6: decisión final con Levenshtein
       ganador = self._get_winner()
       if ganador is None:
+          self._set_decision('sin_consenso', texto)
           return None
 
       # Capa 7: cooldown
       if self._check_cooldown(ganador):
+          self._set_decision('cooldown', texto, ganador)
           return None
 
       self._set_cooldown(ganador)
+      self._set_decision('aceptada', texto, ganador)
       self.reset()
       logger.info(f"Matrícula aceptada: {ganador}")
       return ganador
+
+  def _set_decision(self, decision, texto, ganador=None):
+      """
+      Guarda el motivo de la última decisión del validator, con una copia
+      del voting en ese momento. Solo informativo, para depuración.
+
+      Args:
+          decision (str): baja_confianza | acumulando | sin_consenso | cooldown | aceptada.
+          texto (str): Texto de la lectura tras limpieza/corrección.
+          ganador (str|None): Matrícula ganadora si la hay.
+      """
+      self.last_decision = {
+          "decision": decision,
+          "text": texto,
+          "winner": ganador,
+          "votes": {t: round(float(p), 3) for t, p in self.votes.items()},
+          "frame_count": self.frame_count,
+          "frames_needed": config['detection']['frames_for_voting'],
+      }
 
   def _clean_text(self, texto):
       """Normaliza el texto eliminando caracteres no deseados y convirtiendo a mayúsculas."""

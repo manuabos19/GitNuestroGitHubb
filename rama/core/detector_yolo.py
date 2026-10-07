@@ -32,9 +32,11 @@ class DetectorYOLO:
             frame (numpy.ndarray): Frame completo capturado por la cámara en formato BGR.
 
         Returns:
-            tuple: (recorte, confianza) donde recorte es numpy.ndarray con la zona
-                   de la matrícula y confianza es un float entre 0 y 1.
-                   Devuelve (None, 0.0) si no hay detecciones válidas.
+            tuple: (recorte, confianza, bbox) donde recorte es numpy.ndarray con la
+                   zona de la matrícula, confianza es un float entre 0 y 1 y bbox
+                   es (x1, y1, x2, y2) en coordenadas del frame.
+                   Devuelve (None, 0.0, (0, 0, 0, 0)) si no hay detecciones válidas,
+                   igual que DetectorCoral, que es lo que espera el pipeline.
         """
         result_license_plates = self.model(frame, verbose=False)
 
@@ -50,7 +52,7 @@ class DetectorYOLO:
 
         if x1 is None:
             logger.debug("No se detectó ninguna matrícula válida en el frame.")
-            return None, 0.0
+            return None, 0.0, (0, 0, 0, 0)
 
         logger.debug(f"Matrícula detectada con confianza {best_confidence:.2f} en [{x1},{y1},{x2},{y2}]")
-        return frame[y1:y2, x1:x2], best_confidence
+        return frame[y1:y2, x1:x2], best_confidence, (x1, y1, x2, y2)
