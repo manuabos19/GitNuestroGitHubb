@@ -82,6 +82,11 @@ class FrameGrabber:
                 return None
             return self._frame, self._ts, self._seq
 
+    def ultimo(self):
+        """Último frame leído (o None), sin esperar. Para el editor de ROI."""
+        with self._cond:
+            return self._frame
+
     def stop(self):
         """Para el hilo lector."""
         self.running = False

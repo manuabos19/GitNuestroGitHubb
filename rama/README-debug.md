@@ -22,22 +22,39 @@ Copiar sobre el proyecto RAMA respetando las rutas:
 |---|---|
 | `core/telemetry.py` | **Nuevo.** Tiempos, decisiones, sesiones por vehículo y capturas en disco |
 | `core/frame_grabber.py` | **Nuevo.** Hilo que lee la cámara continuamente y guarda solo el último frame |
-| `api/routes/debug.py` | **Nuevo.** `/debug`, `/ws/debug`, `/api/debug/snapshot`, `/api/debug/captures/{fichero}`, `POST /api/debug/reset` |
+| `core/roi.py` | **Nuevo.** Zona de detección (polígono) |
+| `core/tracker.py` | **Nuevo.** Seguimiento de un único vehículo |
+| `core/detector_coral_multi.py` | **Nuevo.** Hereda de tu `DetectorCoral` y añade `detect_all()` (todas las matrículas, con NMS). No toca `detector_coral.py` |
+| `api/routes/debug.py` | **Nuevo.** `/debug`, `/ws/debug`, `/api/debug/snapshot`, `/api/debug/captures/{fichero}`, `/api/debug/frame.jpg`, `POST /api/debug/detection-config`, `POST /api/debug/reset` |
 | `api/static/debug.html` | **Nuevo.** El dashboard (HTML + JS sin dependencias) |
-| `core/pipeline.py` | Procesa siempre el último frame (sin `frame_skip`), mide cada etapa, OCR con `home_country`, fingerprint con la posición de la matrícula |
-| `core/validator.py` | Tolera `max_missed_frames` frames sin detección antes de resetear el voting; guarda `last_decision` |
-| `core/fingerprint.py` | Zona de carrocería corregida (`frame[top:300]` salía vacía en 1080p), sin `print` ni `imwrite` |
+| `core/pipeline.py` | Último frame (sin `frame_skip`), ROI, seguimiento, OCR con `home_country`, telemetría. **Fingerprint desactivado** |
+| `core/validator.py` | Tolera `max_missed_frames`; `finalize()` para decidir al salir; guarda `last_decision` |
+| `core/detector_yolo.py` | Devuelve también el bbox; añade `detect_all()` |
 | `core/camera.py` | `CAP_PROP_BUFFERSIZE = 1` |
-| `core/detector_yolo.py` | Devuelve también el bbox, como `DetectorCoral` |
+| `core/fingerprint.py` | Corregido pero **sin usar** (lo dejo listo para cuando se active el color) |
 | `api/routes/websocket.py`, `api/main.py`, `main.py` | `stream_loop` pasa al loop de uvicorn (antes enviaba desde otro hilo) |
 
 ## Configuración nueva (opcional, `settings.yaml`)
 
 Todo tiene valor por defecto; no hace falta tocar el yaml para que funcione.
+La ROI y el seguimiento se configuran mejor desde el dashboard: se aplican al
+momento y se guardan en `settings.yaml`.
 
 ```yaml
 detection:
-  max_missed_frames: 2      # frames seguidos sin detección antes de dar el vehículo por perdido
+  max_missed_frames: 2      # frames seguidos sin detección antes de dar el vehículo por ido
+  roi:
+    enabled: false
+    polygon: []             # [[x, y], ...] normalizados 0-1; se dibuja en /debug
+
+tracking:
+  enabled: false
+  skip_ocr_after_read: true # no volver a pasar el OCR a un vehículo ya leído
+  decide_on_exit: true      # si se va sin completar el voting, decidir con lo que haya
+  min_frames_on_exit: 2     # lecturas mínimas para decidir al salir
+  max_jump: 2.0             # desplazamiento máximo entre frames (anchos de matrícula)
+  switch_ratio: 1.3         # cambiar a una matrícula X veces más ancha (más cercana); 0 = nunca
+  switch_frames: 3          # durante cuántos frames seguidos
 
 stream:                     # solo el vídeo del dashboard, NO afecta a la detección
   width: 320
@@ -48,6 +65,31 @@ debug:
   captures_path: debug_captures   # capturas + sesiones.jsonl
   max_captures: 1000              # ficheros jpg máximos (se borran los más antiguos)
 ```
+
+## Zona de detección (ROI)
+
+En `/debug` → «Nueva foto», se dibuja el polígono sobre la imagen real (clic
+para añadir puntos, arrastrar para moverlos, doble clic para borrar) y
+«Guardar y aplicar». El detector solo recibe el rectángulo que contiene la
+zona, con lo de fuera en negro:
+- Las matrículas fuera (la calle, el carril de al lado) no se detectan.
+- La matrícula ocupa más píxeles en la entrada 640×640 de la Coral, así que
+  se detecta mejor y desde más lejos.
+
+## Seguimiento del vehículo
+
+Se engancha a la matrícula más grande (el vehículo más cercano) y en los
+frames siguientes solo acepta la que sea su continuación (posición y tamaño
+coherentes). Las demás se dibujan en naranja y se ignoran hasta que el
+vehículo seguido desaparece `max_missed_frames` frames. Mejoras sobre el voting:
+- Al empezar un vehículo nuevo se resetea el voting: nunca se mezclan votos
+  de dos coches.
+- Leído un vehículo, no se le vuelve a pasar el OCR (el OCR es lo más caro).
+- Si el vehículo se va antes de completar `frames_for_voting`, se decide con
+  las lecturas que haya (mínimo `min_frames_on_exit` y mismo consenso de
+  Levenshtein). Aparece como «al salir» en la tabla.
+- Si un coche parado o el de detrás se engancha primero y luego entra otro
+  claramente más cerca, se cambia a ese.
 
 ## Tiempo real
 

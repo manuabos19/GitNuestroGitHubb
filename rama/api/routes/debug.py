@@ -3,14 +3,22 @@ import json
 import logging
 import os
 import queue
+from typing import List, Optional
+
+import cv2
+import yaml
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
+
+from config.config import config
 from core.telemetry import telemetry
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 DEBUG_HTML = os.path.join(os.path.dirname(__file__), '..', 'static', 'debug.html')
+SETTINGS_PATH = "config/settings.yaml"
 
 
 class DebugManager:
@@ -80,6 +88,105 @@ async def get_debug_capture(filename: str):
     if ruta is None:
         raise HTTPException(status_code=404, detail="Captura no encontrada.")
     return FileResponse(ruta, media_type="image/jpeg")
+
+
+@router.get('/api/debug/frame.jpg')
+async def get_debug_frame():
+    """
+    Último frame de la cámara a resolución completa (para dibujar la ROI).
+
+    Raises:
+        HTTPException 503: Si todavía no hay frames.
+    """
+    frame = telemetry.grabber.ultimo() if telemetry.grabber else None
+    if frame is None:
+        raise HTTPException(status_code=503, detail="Todavía no hay frames de la cámara.")
+    ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if not ok:
+        raise HTTPException(status_code=500, detail="No se pudo codificar el frame.")
+    return Response(buffer.tobytes(), media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
+
+
+class DeteccionBody(BaseModel):
+    roi_enabled:         Optional[bool]              = None
+    roi_polygon:         Optional[List[List[float]]] = None
+    tracking_enabled:    Optional[bool]              = None
+    decide_on_exit:      Optional[bool]              = None
+    skip_ocr_after_read: Optional[bool]              = None
+    min_frames_on_exit:  Optional[int]               = None
+    max_jump:            Optional[float]             = None
+    switch_ratio:        Optional[float]             = None
+    max_missed_frames:   Optional[int]               = None
+
+
+def _guardar_deteccion():
+    """
+    Persiste detection.roi, detection.max_missed_frames y tracking en
+    settings.yaml, igual que settings.py: lee el yaml, cambia solo esas
+    claves y lo vuelve a escribir.
+
+    Returns:
+        bool: True si se guardó, False si no se pudo (queda solo en memoria).
+    """
+    try:
+        with open(SETTINGS_PATH, 'r') as f:
+            settings = yaml.safe_load(f)
+        settings.setdefault('detection', {})
+        settings['detection']['roi'] = config['detection'].get('roi')
+        settings['detection']['max_missed_frames'] = config['detection'].get('max_missed_frames', 2)
+        settings['tracking'] = config.get('tracking')
+        with open(SETTINGS_PATH, 'w') as f:
+            yaml.dump(settings, f, default_flow_style=False, allow_unicode=True)
+        return True
+    except Exception as e:
+        logger.error(f"No se pudo guardar la configuración de detección en {SETTINGS_PATH}: {e}")
+        return False
+
+
+@router.post('/api/debug/detection-config')
+async def update_detection_config(body: DeteccionBody):
+    """
+    Activa/desactiva la ROI y el seguimiento y ajusta sus parámetros.
+
+    Se aplica en caliente (el pipeline lee la config en cada frame) y se
+    guarda en settings.yaml. Solo cambia los campos que vienen en el body.
+
+    Raises:
+        HTTPException 422: Si el polígono no es válido.
+    """
+    roi = dict(config['detection'].get('roi') or {"enabled": False, "polygon": []})
+    tracking = dict(config.get('tracking') or {"enabled": False})
+
+    if body.roi_polygon is not None:
+        poligono = body.roi_polygon
+        if poligono and (len(poligono) < 3 or any(
+                len(p) != 2 or not all(0.0 <= v <= 1.0 for v in p) for p in poligono)):
+            raise HTTPException(status_code=422,
+                                detail="El polígono necesita al menos 3 puntos [x, y] entre 0 y 1.")
+        roi['polygon'] = [[round(x, 4), round(y, 4)] for x, y in poligono]
+    if body.roi_enabled is not None:
+        roi['enabled'] = body.roi_enabled
+    if roi.get('enabled') and len(roi.get('polygon') or []) < 3:
+        raise HTTPException(status_code=422, detail="Dibuja la zona antes de activarla.")
+
+    if body.tracking_enabled    is not None: tracking['enabled']             = body.tracking_enabled
+    if body.decide_on_exit      is not None: tracking['decide_on_exit']      = body.decide_on_exit
+    if body.skip_ocr_after_read is not None: tracking['skip_ocr_after_read'] = body.skip_ocr_after_read
+    if body.min_frames_on_exit  is not None: tracking['min_frames_on_exit']  = max(1, body.min_frames_on_exit)
+    if body.max_jump            is not None: tracking['max_jump']            = max(0.1, body.max_jump)
+    if body.switch_ratio        is not None: tracking['switch_ratio']        = max(0.0, body.switch_ratio)
+    if body.max_missed_frames   is not None:
+        config['detection']['max_missed_frames'] = max(0, body.max_missed_frames)
+
+    # Se sustituyen los dicts enteros: el pipeline nunca ve uno a medio cambiar
+    config['detection']['roi'] = roi
+    config['tracking'] = tracking
+
+    guardado = _guardar_deteccion()
+    logger.info(f"Configuración de detección actualizada: roi={roi} tracking={tracking}")
+    return {"status": "ok", "saved": guardado, "roi": roi, "tracking": tracking,
+            "max_missed_frames": config['detection'].get('max_missed_frames', 2)}
 
 
 @router.post('/api/debug/reset')

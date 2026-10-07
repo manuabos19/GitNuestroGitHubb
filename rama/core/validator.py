@@ -83,15 +83,59 @@ class Validator:
       logger.info(f"Matrícula aceptada: {ganador}")
       return ganador
 
-  def _set_decision(self, decision, texto, ganador=None):
+  def finalize(self, min_frames=2):
+      """
+      Decide con los votos acumulados cuando el vehículo se va.
+
+      Se usa con el seguimiento activo: si el vehículo sale de la imagen
+      antes de llegar a frames_for_voting, en vez de perder la lectura se
+      decide con lo que haya, siempre que haya al menos `min_frames`
+      lecturas y el ganador tenga consenso suficiente (mismas reglas de
+      Levenshtein y margen que en validate). Después resetea el voting.
+
+      Args:
+          min_frames (int): Lecturas mínimas para poder decidir.
+
+      Returns:
+          str: Matrícula aceptada o None.
+      """
+      if not self.votes:
+          self.reset()
+          return None
+
+      if self.frame_count < min_frames:
+          self._set_decision('insuficiente', None, on_exit=True)
+          self.reset()
+          return None
+
+      ganador = self._get_winner()
+      if ganador is None:
+          self._set_decision('sin_consenso', None, on_exit=True)
+          self.reset()
+          return None
+
+      if self._check_cooldown(ganador):
+          self._set_decision('cooldown', None, ganador, on_exit=True)
+          self.reset()
+          return None
+
+      self._set_cooldown(ganador)
+      self._set_decision('aceptada', None, ganador, on_exit=True)
+      self.reset()
+      logger.info(f"Matrícula aceptada al salir el vehículo: {ganador}")
+      return ganador
+
+  def _set_decision(self, decision, texto, ganador=None, on_exit=False):
       """
       Guarda el motivo de la última decisión del validator, con una copia
       del voting en ese momento. Solo informativo, para depuración.
 
       Args:
-          decision (str): ocr_vacio | baja_confianza | acumulando | sin_consenso | cooldown | aceptada.
+          decision (str): ocr_vacio | baja_confianza | acumulando | sin_consenso |
+                          cooldown | aceptada | insuficiente (solo en finalize).
           texto (str): Texto de la lectura tras limpieza/corrección.
           ganador (str|None): Matrícula ganadora si la hay.
+          on_exit (bool): Si la decisión se tomó al salir el vehículo (finalize).
       """
       self.last_decision = {
           "decision": decision,
@@ -100,6 +144,7 @@ class Validator:
           "votes": {t: round(float(p), 3) for t, p in self.votes.items()},
           "frame_count": self.frame_count,
           "frames_needed": config['detection']['frames_for_voting'],
+          "on_exit": on_exit,
       }
 
   def _clean_text(self, texto):

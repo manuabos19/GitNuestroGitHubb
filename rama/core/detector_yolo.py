@@ -56,3 +56,24 @@ class DetectorYOLO:
 
         logger.debug(f"Matrícula detectada con confianza {best_confidence:.2f} en [{x1},{y1},{x2},{y2}]")
         return frame[y1:y2, x1:x2], best_confidence, (x1, y1, x2, y2)
+
+    def detect_all(self, frame):
+        """
+        Detecta todas las matrículas del frame por encima del threshold.
+
+        Args:
+            frame (numpy.ndarray): Imagen BGR (frame completo o zona ROI).
+
+        Returns:
+            list[dict]: [{"bbox": (x1, y1, x2, y2), "conf": float}, ...]
+                        en coordenadas de `frame`, ordenadas por confianza.
+        """
+        detecciones = []
+        for result in self.model(frame, verbose=False):
+            for box in result.boxes:
+                confidence = float(box.conf[0])
+                if confidence > config['detection']['threshold']:
+                    detecciones.append({"bbox": tuple(map(int, box.xyxy[0])), "conf": confidence})
+
+        detecciones.sort(key=lambda d: d["conf"], reverse=True)
+        return detecciones

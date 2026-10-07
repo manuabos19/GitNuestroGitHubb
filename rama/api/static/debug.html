@@ -164,7 +164,8 @@
   .b-sin_consenso::before { background: var(--warning); }
   .b-baja_confianza::before, .b-ocr_vacio::before { background: var(--serious); }
   .b-perdida::before { background: var(--critical); }
-  .b-cooldown::before, .b-sin_deteccion::before { background: var(--muted); }
+  .b-cooldown::before, .b-sin_deteccion::before, .b-ya_leida::before { background: var(--muted); }
+  .b-insuficiente::before { background: var(--warning); }
 
   .votes { display: grid; gap: 5px; }
   .vote { display: grid; grid-template-columns: 110px minmax(0, 1fr) 52px; gap: 8px; align-items: center; font-size: 13px; }
@@ -210,6 +211,29 @@
   td img.cap-full { height: 40px; width: 71px; object-fit: cover; border-radius: 3px; display: block; cursor: zoom-in; background: #000; }
   td img.cap-crop { height: 22px; max-width: 90px; border-radius: 3px; display: block; cursor: zoom-in; }
   .kpi.alert { border-color: var(--critical); }
+
+  .roi-ed { position: relative; background: #000; border-radius: 8px; overflow: hidden; min-height: 120px; touch-action: none; }
+  .roi-ed img { width: 100%; display: block; user-select: none; -webkit-user-drag: none; }
+  .roi-ed canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  .roi-ed .ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #898781; font-size: 13px; text-align: center; padding: 12px; }
+  .opts { display: grid; gap: 10px; align-content: start; }
+  .opt { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: start; }
+  .opt input[type=checkbox] { margin: 3px 0 0; width: 16px; height: 16px; }
+  .opt b { font-weight: 600; }
+  .opt span { grid-column: 2; font-size: 12px; color: var(--ink-2); }
+  .opt.sub, .num.sub { margin-left: 24px; }
+  .disabled { opacity: .45; }
+  .num { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .num input {
+    font: inherit; width: 72px; padding: 3px 6px; text-align: right;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--page); color: var(--ink);
+  }
+  .save-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button.primary { background: var(--s-detect); border-color: var(--s-detect); color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); background: var(--s-detect); }
+  #cfg-status { font-size: 12px; color: var(--ink-2); }
+  #cfg-status.err { color: var(--critical); }
+  .roi-pts { font-size: 12px; color: var(--muted); font-family: var(--mono); word-break: break-all; }
   .kpi.alert .hint { color: var(--critical); }
 
   .modal {
@@ -294,6 +318,36 @@
     </div>
   </section>
 
+  <section class="grid g-2">
+    <div class="card">
+      <h2>Zona de detección (ROI) <span class="meta">clic: añadir punto · arrastrar: mover · doble clic en un punto: borrarlo</span>
+        <span class="right">
+          <button id="roi-snap" title="Coge el último frame de la cámara">Nueva foto</button>
+          <button id="roi-undo">Deshacer</button>
+          <button id="roi-clear">Borrar zona</button>
+        </span>
+      </h2>
+      <div class="roi-ed" id="roi-ed"><img id="roi-img" alt=""><canvas id="roi-cv"></canvas><span class="ph" id="roi-ph">Pulsa «Nueva foto» para dibujar la zona sobre la imagen real</span></div>
+      <div class="roi-pts" id="roi-pts" style="margin-top:6px"></div>
+    </div>
+    <div class="card opts">
+      <h2>Opciones de detección <span class="meta">se aplican al momento</span></h2>
+      <label class="opt"><input type="checkbox" id="o-roi"><b>Zona de detección (ROI)</b>
+        <span>Solo se buscan matrículas dentro del polígono. El detector recibe solo esa zona, así la matrícula ocupa más píxeles.</span></label>
+      <label class="opt"><input type="checkbox" id="o-track"><b>Seguimiento del vehículo</b>
+        <span>Se engancha al vehículo más cercano y no lee otro hasta que este se va. Las demás matrículas se marcan en naranja y se ignoran.</span></label>
+      <label class="opt sub" data-dep="o-track"><input type="checkbox" id="o-skip"><b>No volver a leer un vehículo ya leído</b>
+        <span>Tras aceptar la matrícula se deja de pasar el OCR a ese vehículo (libera CPU).</span></label>
+      <label class="opt sub" data-dep="o-track"><input type="checkbox" id="o-exit"><b>Decidir al salir</b>
+        <span>Si el vehículo se va antes de completar el voting, se decide con las lecturas que haya (si hay consenso).</span></label>
+      <div class="num sub" data-dep="o-track"><span>Lecturas mínimas para decidir al salir</span><input type="number" id="o-minexit" min="1" max="20" step="1"></div>
+      <div class="num sub" data-dep="o-track"><span>Salto máximo entre frames (anchos de matrícula)</span><input type="number" id="o-jump" min="0.2" max="10" step="0.1"></div>
+      <div class="num sub" data-dep="o-track" title="Si otra matrícula es este número de veces más ancha que la seguida durante 3 frames, se cambia a ella (está más cerca). 0 = no cambiar nunca."><span>Cambiar a un vehículo más cercano si es × más ancho (0 = nunca)</span><input type="number" id="o-switch" min="0" max="5" step="0.1"></div>
+      <div class="num"><span>Frames sin detección para dar el vehículo por ido</span><input type="number" id="o-missed" min="0" max="30" step="1"></div>
+      <div class="save-row"><button class="primary" id="cfg-save">Guardar y aplicar</button><button id="cfg-revert">Descartar cambios</button><span id="cfg-status"></span></div>
+    </div>
+  </section>
+
   <section class="grid g-2b">
     <div class="card">
       <h2>Tiempos por frame procesado <span class="meta">ms · últimos 120</span></h2>
@@ -353,7 +407,7 @@
     <div class="scroll">
       <table>
         <thead><tr>
-          <th>Hora</th><th class="n">Frame</th><th class="n">Sesión</th><th class="n">Conf. det</th><th>Bbox (px)</th>
+          <th>Hora</th><th class="n">Frame</th><th class="n">Sesión</th><th class="n">Otras</th><th class="n">Conf. det</th><th>Bbox (px)</th>
           <th>OCR</th><th class="n">Conf. OCR</th><th>Decisión</th>
           <th class="n">Desc.</th><th class="n">Retraso</th><th class="n">Detector</th><th class="n">OCR</th><th class="n">Valid.</th><th class="n">Total</th>
         </tr></thead>
@@ -420,9 +474,12 @@
     aceptada: 'Aceptada', acumulando: 'Acumulando', sin_consenso: 'Sin consenso',
     baja_confianza: 'Baja confianza', cooldown: 'Cooldown', ocr_vacio: 'OCR vacío',
     sin_deteccion: 'Sin detección', leida: 'Leída', perdida: 'Perdida',
+    ya_leida: 'Ya leída', insuficiente: 'Pocas lecturas',
   };
   const badge = (key) => key ? `<span class="badge b-${esc(key)}">${esc(DECISION_LABEL[key] || key)}</span>` : '';
-  const frameDecision = (f) => !f.detected ? 'sin_deteccion' : !f.ocr_text ? 'ocr_vacio' : (f.validator?.decision || null);
+  const ignoredOf = (f) => (f.ignored_roi || 0) + (f.track?.ignored || 0);
+  const frameDecision = (f) => f.exit_validator && !f.detected ? f.exit_validator.decision : !f.detected ? 'sin_deteccion' :
+    f.ocr_skipped ? 'ya_leida' : !f.ocr_text ? 'ocr_vacio' : (f.validator?.decision || null);
 
   // ── WebSocket de telemetría ─────────────────────────────────────────────────
   let wsDebug = null, debugRetry = 1000;
@@ -525,7 +582,8 @@
   function renderHeader() {
     const s = st.stats; if (!s) return;
     const c = s.config || {};
-    $('hdr-sub').textContent = `${c.camera_id || ''} · ${c.backend || '?'} · ${c.country || ''} · activo ${fmtUptime(s.uptime_s)}`;
+    $('hdr-sub').textContent = `${c.camera_id || ''} · ${c.backend || '?'} · ${c.country || ''} · ROI ${c.roi?.enabled ? 'sí' : 'no'} · seguimiento ${c.tracking?.enabled ? 'sí' : 'no'} · activo ${fmtUptime(s.uptime_s)}`;
+    syncConfig(c);
     setDot('dot-cam', s.system.camera_connected ? 'ok' : 'ko');
     setDot('dot-eq', s.system.eqbroker_connected ? 'ok' : 'ko');
     const parts = [];
@@ -577,7 +635,7 @@
   const STAGES = [
     ['read', 'Intervalo entre frames (cámara)'], ['wait', 'Espera hasta procesar'],
     ['detect', 'Detector'], ['ocr', 'OCR'],
-    ['validate', 'Validator'], ['store', 'Fingerprint + guardado'], ['total', 'Total frame'],
+    ['validate', 'Validator'], ['store', 'Guardado (JsonStore)'], ['total', 'Total frame'],
     ['age', 'Retraso captura → resultado'],
     ['time_to_read', 'Hasta lectura (por vehículo)'],
   ];
@@ -599,6 +657,9 @@
     ['decision_sin_consenso', 'Sin consenso'], ['decision_cooldown', 'Bloqueos cooldown'],
     ['decision_aceptada', 'Aceptadas'], ['sesiones_leida', 'Sesiones leídas'],
     ['sesiones_perdida', 'Sesiones perdidas'], ['sesiones_cooldown', 'Sesiones en cooldown'],
+    ['ignoradas_roi', 'En el borde de la ROI (descartadas)'], ['ignoradas_seguimiento', 'Ignoradas por seguimiento'],
+    ['ocr_saltado', 'OCR ahorrados (ya leída)'], ['cambios_a_mas_cercano', 'Cambios a vehículo más cercano'],
+    ['decisiones_al_salir', 'Decisiones al salir'], ['salida_aceptada', 'Aceptadas al salir'],
   ];
   function renderCounters() {
     const c = st.stats?.counters || {};
@@ -683,7 +744,7 @@
       return `<tr>
         <td class="n">${s.id}</td><td>${fmtClock(s.start)}</td>
         <td>${capsCell(s)}</td>
-        <td>${badge(s.result)}</td>
+        <td>${badge(s.result)}${s.accepted_on_exit ? ' <span class="dim" title="Decidida al salir el vehículo">al salir</span>' : ''}</td>
         <td class="mono">${esc(s.plate || '—')}</td>
         <td><input class="truth" data-key="${key}" value="${esc(truth)}" placeholder="real" spellcheck="false"> ${cmp}</td>
         <td class="n">${fmtMs(s.time_to_read_ms)}</td><td class="n">${fmtMs(s.duration_ms)}</td>
@@ -715,6 +776,7 @@
     if (!f.detected && $('f-det').checked) tr.style.display = 'none';
     const valMs = (f.t_validate_ms || 0) + (f.t_store_ms || 0);
     tr.innerHTML = `<td>${fmtTime(f.ts)}</td><td class="n">${f.frame_id}</td><td class="n">${f.session_id ?? '<span class="dim">—</span>'}</td>
+      <td class="n">${ignoredOf(f) || ''}</td>
       <td class="n">${f.detected ? fmtConf(f.det_conf) : '<span class="dim">—</span>'}</td>
       <td class="dim">${f.bbox ? `${f.bbox.join(',')} <span>(${f.crop_wh?.join('×')})</span>` : ''}</td>
       <td class="mono">${esc(f.validator?.text || f.ocr_text || '')}</td>
@@ -915,6 +977,180 @@
      <div>${sw('--s-ocr')}<span class="k">OCR</span> <b>${fmtConf(f.ocr_conf)}</b> <span class="k">${esc(f.validator?.text || f.ocr_text || '')}</span></div>
      <div><span class="k">Decisión</span> <b>${esc(DECISION_LABEL[frameDecision(f)] || '—')}</b></div>` : '<div class="k">Sin detección</div>'}`);
 
+  // ── Opciones de detección (ROI + seguimiento) ───────────────────────────────
+  // El formulario refleja la config del servidor hasta que el usuario toca algo;
+  // desde ese momento manda lo editado hasta guardar o descartar.
+  let cfgDirty = false;
+  let roiPoly = [];       // [[x, y], ...] normalizados 0-1
+  let roiHistory = [];
+
+  function setStatus(text, err = false) {
+    $('cfg-status').textContent = text;
+    $('cfg-status').classList.toggle('err', err);
+  }
+
+  function updateDeps() {
+    const on = $('o-track').checked;
+    document.querySelectorAll('[data-dep="o-track"]').forEach((el) => {
+      el.classList.toggle('disabled', !on);
+      el.querySelectorAll('input').forEach((i) => { i.disabled = !on; });
+    });
+  }
+
+  function syncConfig(c) {
+    if (cfgDirty || !c) return;
+    const t = c.tracking || {};
+    $('o-roi').checked = !!c.roi?.enabled;
+    $('o-track').checked = !!t.enabled;
+    $('o-skip').checked = t.skip_ocr_after_read ?? true;
+    $('o-exit').checked = t.decide_on_exit ?? true;
+    $('o-minexit').value = t.min_frames_on_exit ?? 2;
+    $('o-jump').value = t.max_jump ?? 2.0;
+    $('o-switch').value = t.switch_ratio ?? 1.3;
+    $('o-missed').value = c.max_missed_frames ?? 2;
+    roiPoly = (c.roi?.polygon || []).map((p) => [p[0], p[1]]);
+    updateDeps();
+    drawRoi();
+  }
+
+  function markDirty() {
+    cfgDirty = true;
+    setStatus('Cambios sin guardar');
+    updateDeps();
+  }
+  ['o-roi', 'o-track', 'o-skip', 'o-exit', 'o-minexit', 'o-jump', 'o-switch', 'o-missed'].forEach((id) =>
+    $(id).addEventListener('input', markDirty));
+
+  $('cfg-revert').onclick = () => { cfgDirty = false; roiHistory = []; setStatus(''); syncConfig(st.stats?.config); };
+
+  $('cfg-save').onclick = async () => {
+    if ($('o-roi').checked && roiPoly.length < 3) { setStatus('Dibuja al menos 3 puntos antes de activar la zona.', true); return; }
+    const body = {
+      roi_enabled: $('o-roi').checked,
+      roi_polygon: roiPoly.length >= 3 ? roiPoly : [],
+      tracking_enabled: $('o-track').checked,
+      skip_ocr_after_read: $('o-skip').checked,
+      decide_on_exit: $('o-exit').checked,
+      min_frames_on_exit: parseInt($('o-minexit').value, 10) || 2,
+      max_jump: parseFloat($('o-jump').value) || 2.0,
+      switch_ratio: Math.max(0, parseFloat($('o-switch').value) || 0),
+      max_missed_frames: Math.max(0, parseInt($('o-missed').value, 10) || 0),
+    };
+    setStatus('Guardando…');
+    try {
+      const r = await fetch(`${HTTP}/api/debug/detection-config`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) { setStatus(d.detail || `Error ${r.status}`, true); return; }
+      cfgDirty = false; roiHistory = [];
+      if (st.stats) {
+        st.stats.config.roi = d.roi; st.stats.config.tracking = d.tracking;
+        st.stats.config.max_missed_frames = d.max_missed_frames;
+      }
+      setStatus(d.saved ? 'Aplicado y guardado en settings.yaml' : 'Aplicado (no se pudo escribir settings.yaml, mira el log)', !d.saved);
+    } catch (e) { setStatus('No se pudo guardar: ' + e, true); }
+  };
+
+  // Editor del polígono sobre una foto real de la cámara
+  const roiImg = $('roi-img'), roiCv = $('roi-cv');
+  let dragIdx = null;
+
+  function snapRoi() {
+    $('roi-ph').textContent = 'Cargando foto…'; $('roi-ph').style.display = '';
+    roiImg.onload = () => { $('roi-ph').style.display = 'none'; drawRoi(); };
+    roiImg.onerror = () => {
+      $('roi-ph').textContent = 'No hay foto todavía (¿cámara conectada?). Reintentando…';
+      if (!roiImg.naturalWidth) setTimeout(() => { if (!roiImg.naturalWidth) snapRoi(); }, 5000);
+    };
+    roiImg.src = `${HTTP}/api/debug/frame.jpg?t=${Date.now()}`;
+  }
+  $('roi-snap').onclick = snapRoi;
+
+  function roiCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = roiCv.clientWidth, h = roiCv.clientHeight;
+    if (roiCv.width !== Math.round(w * dpr) || roiCv.height !== Math.round(h * dpr)) {
+      roiCv.width = Math.round(w * dpr); roiCv.height = Math.round(h * dpr);
+    }
+    const ctx = roiCv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    return { ctx, w, h };
+  }
+
+  function drawRoi() {
+    const { ctx, w, h } = roiCanvas();
+    const pts = roiPoly.map(([x, y]) => [x * w, y * h]);
+    if (pts.length) {
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      if (pts.length >= 3) {
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 200, 255, 0.18)'; ctx.fill();
+      }
+      ctx.strokeStyle = '#00c8ff'; ctx.lineWidth = 2; ctx.stroke();
+      pts.forEach(([x, y], i) => {
+        ctx.beginPath(); ctx.arc(x, y, i === dragIdx ? 7 : 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#00c8ff'; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = '#000'; ctx.stroke();
+      });
+    }
+    $('roi-pts').textContent = roiPoly.length
+      ? `${roiPoly.length} puntos: ` + roiPoly.map((p) => `[${p[0].toFixed(3)}, ${p[1].toFixed(3)}]`).join(' ')
+      : 'Sin zona: se busca en toda la imagen.';
+  }
+
+  function evPoint(e) {
+    const r = roiCv.getBoundingClientRect();
+    return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)), r];
+  }
+  function hitVertex(px, py, r) {
+    return roiPoly.findIndex(([x, y]) => Math.hypot((x - px) * r.width, (y - py) * r.height) <= 10);
+  }
+  function pushHistory() { roiHistory.push(roiPoly.map((p) => p.slice())); if (roiHistory.length > 50) roiHistory.shift(); }
+
+  // Inserta el punto en el lado más cercano del polígono (o al final si está lejos)
+  function insertPoint(px, py, r) {
+    let best = -1, bestD = 14;
+    for (let i = 0; i < roiPoly.length && roiPoly.length >= 3; i++) {
+      const [ax, ay] = roiPoly[i], [bx, by] = roiPoly[(i + 1) % roiPoly.length];
+      const ax_ = ax * r.width, ay_ = ay * r.height, bx_ = bx * r.width, by_ = by * r.height;
+      const qx = px * r.width, qy = py * r.height;
+      const len2 = (bx_ - ax_) ** 2 + (by_ - ay_) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((qx - ax_) * (bx_ - ax_) + (qy - ay_) * (by_ - ay_)) / len2));
+      const d = Math.hypot(qx - (ax_ + t * (bx_ - ax_)), qy - (ay_ + t * (by_ - ay_)));
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best >= 0) roiPoly.splice(best + 1, 0, [px, py]);
+    else roiPoly.push([px, py]);
+  }
+
+  roiCv.addEventListener('pointerdown', (e) => {
+    const [px, py, r] = evPoint(e);
+    const i = hitVertex(px, py, r);
+    pushHistory();
+    if (i >= 0) dragIdx = i;
+    else { insertPoint(px, py, r); dragIdx = roiPoly.findIndex((p) => p[0] === px && p[1] === py); }
+    roiCv.setPointerCapture(e.pointerId);
+    markDirty(); drawRoi();
+  });
+  roiCv.addEventListener('pointermove', (e) => {
+    if (dragIdx == null) return;
+    const [px, py] = evPoint(e);
+    roiPoly[dragIdx] = [px, py];
+    drawRoi();
+  });
+  roiCv.addEventListener('pointerup', () => { dragIdx = null; drawRoi(); });
+  roiCv.addEventListener('dblclick', (e) => {
+    const [px, py, r] = evPoint(e);
+    const i = hitVertex(px, py, r);
+    if (i >= 0) { roiPoly.splice(i, 1); markDirty(); drawRoi(); }
+  });
+  $('roi-undo').onclick = () => { if (roiHistory.length) { roiPoly = roiHistory.pop(); markDirty(); drawRoi(); } };
+  $('roi-clear').onclick = () => { pushHistory(); roiPoly = []; $('o-roi').checked = false; markDirty(); drawRoi(); };
+  window.addEventListener('resize', drawRoi);
+
   // ── Exportar ────────────────────────────────────────────────────────────────
   function download(name, text, type) {
     const a = document.createElement('a');
@@ -934,7 +1170,8 @@
         frames_hasta_lectura: s.frames_to_read ?? '', lecturas_ocr: s.ocr_reads,
         lecturas_distintas: s.n_distinct_readings, conf_det_max: s.best_det_conf,
         conf_ocr_aceptada: s.accepted_conf ?? '',
-        frames_sin_deteccion: s.missed_total ?? '', color: s.fingerprint?.color || '',
+        frames_sin_deteccion: s.missed_total ?? '', decidida_al_salir: s.accepted_on_exit ? 'si' : '',
+        otras_matriculas_max: s.ignored_max ?? '', ocr_ahorrados: s.ocr_skipped ?? '',
         captura_vehiculo: s.capture_full || '', captura_matricula: s.capture_crop || '',
         lecturas: (s.readings || []).map((r) => `${r.text}x${r.n}`).join(' '),
       };
@@ -992,7 +1229,7 @@
       .map(([t, w]) => `<span class="mono">${esc(t)}</span> <span class="dim">${w.toFixed(2)}</span>`).join(' · ') : '—';
     $('viewer').innerHTML = `
       <div class="top">
-        <span class="plate">${esc(s.plate || 'Sin lectura')}</span>${badge(s.result)}
+        <span class="plate">${esc(s.plate || (s.result === 'cooldown' ? 'Ya leída hace poco' : 'Sin lectura'))}</span>${badge(s.result)}
         ${truth ? `<span class="${ok ? 'ok-ink' : 'ko-ink'}">${ok ? '✓' : '✗'} real ${esc(truth)}</span>` : ''}
         <span class="dim">Sesión #${s.id} · ${fmtClock(s.start)}</span>
         <span class="close nav"><button data-nav="1" title="Más reciente (←)">←</button><button data-nav="-1" title="Más antigua (→)">→</button><button data-close>Cerrar</button></span>
@@ -1006,7 +1243,8 @@
           <dt>Conf. detector máx</dt><dd>${fmtConf(s.best_det_conf)}</dd>
           <dt>Conf. OCR aceptada</dt><dd>${fmtConf(s.accepted_conf)}</dd>
           <dt>Recorte</dt><dd>${s.capture_bbox ? `bbox ${s.capture_bbox.join(',')} · ${s.capture_bbox[2] - s.capture_bbox[0]}×${s.capture_bbox[3] - s.capture_bbox[1]} px en ${s.capture_wh ? s.capture_wh.join('×') : '?'}` : '—'}</dd>
-          <dt>Color</dt><dd>${esc(s.fingerprint?.color || '—')}</dd>
+          <dt>Decisión</dt><dd>${s.accepted_on_exit ? 'Al salir el vehículo (votos acumulados)' : s.plate ? 'Voting completo' : esc(DECISION_LABEL[s.last_decision] || s.last_decision || '—')}</dd>
+          <dt>Otras matrículas</dt><dd>${s.ignored_max ? `hasta ${s.ignored_max} a la vez (ignoradas)` : 'ninguna'}${s.ocr_skipped ? ` · ${s.ocr_skipped} OCR ahorrados` : ''}</dd>
           <dt>Voting al aceptar</dt><dd>${votes}</dd>
           <dt>Lecturas OCR</dt><dd>${reads || '—'}</dd>
         </dl>
@@ -1042,6 +1280,8 @@
 
   applyTheme();
   setVideo(videoOn);
+  updateDeps();
+  snapRoi();
   renderTimings(); renderCounters(); renderSessions();
   connectDebug();
 })();

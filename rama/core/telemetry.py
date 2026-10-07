@@ -89,6 +89,7 @@ class Telemetry:
         self._sesion = None
         self._siguiente_sesion = 1
         self._colas = {}
+        self.grabber = None  # FrameGrabber, lo registra el pipeline (editor de ROI)
 
         debug_cfg = config.get('debug', {})
         self.dir_capturas = debug_cfg.get('captures_path', 'debug_captures')
@@ -220,6 +221,15 @@ class Telemetry:
         with self._lock:
             self.contadores['frames_procesados'] += 1
             self.contadores['frames_descartados'] += ev.get('dropped', 0)
+            self.contadores['ignoradas_roi'] += ev.get('ignored_roi', 0)
+            self.contadores['ignoradas_seguimiento'] += (ev.get('track') or {}).get('ignored', 0)
+            if ev.get('ocr_skipped'):
+                self.contadores['ocr_saltado'] += 1
+            if ev.get('exit_validator'):
+                self.contadores['decisiones_al_salir'] += 1
+                self.contadores[f"salida_{ev['exit_validator']['decision']}"] += 1
+            if (ev.get('track') or {}).get('switched'):
+                self.contadores['cambios_a_mas_cercano'] += 1
             self._ts_procesados.append(ahora)
 
             if ev.get('detected'):
@@ -241,7 +251,29 @@ class Telemetry:
     # ── Sesiones (pasos de vehículo) ─────────────────────────────────────────
 
     def _actualizar_sesion(self, ev, crop, frame, ahora):
-        """Abre/actualiza/cierra la sesión actual."""
+        """
+        Abre/actualiza/cierra la sesión actual.
+
+        Con seguimiento activo la sesión es el vehículo seguido: cambia
+        cuando cambia el id del seguimiento y se cierra cuando termina.
+        Sin seguimiento se cierra tras más de max_missed_frames frames
+        seguidos sin detección.
+        """
+        track = ev.get('track')
+        if track is not None:
+            if self._sesion and track.get('ended') is not None:
+                # Decisión al salir el vehículo (validator.finalize) y cierre
+                if ev.get('exit_validator'):
+                    self._registrar_decision(ev, ahora, ev['exit_validator'])
+                self._cerrar_sesion()
+            if self._sesion and track.get('id') is not None and track['id'] != self._sesion['track_id']:
+                self._cerrar_sesion()
+            if ev.get('detected'):
+                self._sumar_frame(ev, crop, frame, ahora, track['id'])
+            elif self._sesion:
+                self._sesion["missed_total"] += 1
+            return
+
         if not ev.get('detected'):
             if self._sesion is None:
                 return
@@ -250,9 +282,14 @@ class Telemetry:
                 self._cerrar_sesion()
             return
 
+        self._sumar_frame(ev, crop, frame, ahora, None)
+
+    def _sumar_frame(self, ev, crop, frame, ahora, track_id):
+        """Añade un frame con detección a la sesión (abriéndola si hace falta)."""
         if self._sesion is None:
             self._sesion = {
                 "id": self._siguiente_sesion,
+                "track_id": track_id,
                 "start": ahora,
                 "end": None,
                 "duration_ms": None,
@@ -260,16 +297,18 @@ class Telemetry:
                 "missed": 0,
                 "missed_total": 0,
                 "ocr_reads": 0,
+                "ocr_skipped": 0,
+                "ignored_max": 0,
                 "readings": {},
                 "best_det_conf": 0.0,
                 "result": None,
                 "plate": None,
                 "accepted_conf": None,
+                "accepted_on_exit": False,
                 "time_to_read_ms": None,
                 "frames_to_read": None,
                 "votes_at_accept": None,
                 "last_decision": None,
-                "fingerprint": None,
                 "capture_bbox": None,
                 "capture_wh": None,
                 "_frame": None,
@@ -282,6 +321,10 @@ class Telemetry:
         s["missed"] = 0
         s["frames"] += 1
         s["end"] = ahora
+        s["ignored_max"] = max(s["ignored_max"],
+                               (ev.get('track') or {}).get('ignored', 0) + ev.get('ignored_roi', 0))
+        if ev.get('ocr_skipped'):
+            s["ocr_skipped"] += 1
 
         if ev.get('ocr_text'):
             s["ocr_reads"] += 1
@@ -290,9 +333,6 @@ class Telemetry:
             r["conf_sum"] += ev.get('ocr_conf') or 0.0
 
         v = ev.get('validator') or {}
-        if v.get('decision'):
-            s["last_decision"] = v['decision']
-
         aceptada = v.get('decision') == 'aceptada' and s["plate"] is None
         # Captura: la del momento de la lectura; hasta entonces, la de mejor detección
         if aceptada or (s["plate"] is None and ev.get('det_conf', 0) >= s["best_det_conf"]):
@@ -301,15 +341,24 @@ class Telemetry:
             s["capture_wh"] = ev.get('frame_wh')
         s["best_det_conf"] = max(s["best_det_conf"], ev.get('det_conf', 0))
 
-        if aceptada:
+        self._registrar_decision(ev, ahora)
+
+    def _registrar_decision(self, ev, ahora, v=None):
+        """Apunta la decisión del validator en la sesión y emite la sesión en vivo."""
+        s = self._sesion
+        v = v if v is not None else (ev.get('validator') or {})
+        if v.get('decision') and v['decision'] != 'ya_leida':
+            s["last_decision"] = v['decision']
+
+        if v.get('decision') == 'aceptada' and s["plate"] is None:
             s["plate"] = v.get('winner')
-            s["accepted_conf"] = ev.get('ocr_conf')
+            s["accepted_on_exit"] = bool(v.get('on_exit'))
+            s["accepted_conf"] = None if v.get('on_exit') else ev.get('ocr_conf')
+            # Al salir, incluye los frames de espera hasta dar el vehículo por ido
             s["time_to_read_ms"] = round((ahora - s["start"]) * 1000)
             s["frames_to_read"] = s["frames"]
             s["votes_at_accept"] = v.get('votes')
-            s["fingerprint"] = ev.get('fingerprint')
 
-        # Actualización en vivo de la sesión abierta
         self._emitir({"type": "session_live", "data": self._sesion_publica(s)})
 
     def _cerrar_sesion(self):
@@ -406,6 +455,8 @@ class Telemetry:
                 "ocr_threshold": config['ocr'].get('threshold'),
                 "frames_for_voting": config['detection'].get('frames_for_voting'),
                 "max_missed_frames": config['detection'].get('max_missed_frames', 2),
+                "roi": config['detection'].get('roi') or {"enabled": False, "polygon": []},
+                "tracking": config.get('tracking') or {"enabled": False},
                 "cooldown_seconds": config['detection'].get('cooldown_seconds'),
                 "country": config.get('location', {}).get('country'),
                 "camera_fps": config['camera'].get('fps'),
