@@ -195,7 +195,6 @@
   td.mono { font-family: var(--mono); }
   .scroll { overflow: auto; max-height: 420px; }
   .scroll.short { max-height: 320px; }
-  td img.thumb { height: 28px; max-width: 110px; border-radius: 3px; display: block; cursor: zoom-in; }
   td input.truth {
     font: inherit; font-family: var(--mono); width: 100px; padding: 2px 6px;
     border: 1px solid var(--border); border-radius: 6px; background: var(--page); color: var(--ink);
@@ -207,12 +206,35 @@
   tr.live td { background: var(--surface-2); }
   label.chk { font-size: 12px; color: var(--ink-2); display: inline-flex; gap: 4px; align-items: center; }
 
+  td .caps { display: flex; gap: 4px; align-items: center; }
+  td img.cap-full { height: 40px; width: 71px; object-fit: cover; border-radius: 3px; display: block; cursor: zoom-in; background: #000; }
+  td img.cap-crop { height: 22px; max-width: 90px; border-radius: 3px; display: block; cursor: zoom-in; }
+  .kpi.alert { border-color: var(--critical); }
+  .kpi.alert .hint { color: var(--critical); }
+
   .modal {
-    position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none;
+    position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none;
     align-items: center; justify-content: center; z-index: 20; padding: 16px;
   }
-  .modal img { max-width: 100%; max-height: 80vh; image-rendering: pixelated; background: #000; }
   .modal.show { display: flex; }
+  .viewer {
+    background: var(--surface); color: var(--ink); border-radius: 12px; padding: 12px;
+    width: min(1200px, 100%); max-height: calc(100vh - 32px); overflow: auto;
+    display: grid; gap: 10px;
+  }
+  .viewer .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .viewer .top .plate { font-size: 24px; }
+  .viewer .top .close { margin-left: auto; }
+  .viewer .full { background: #000; border-radius: 8px; overflow: hidden; }
+  .viewer .full img { width: 100%; max-height: 62vh; object-fit: contain; display: block; }
+  .viewer .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; align-items: start; }
+  @media (max-width: 760px) { .viewer .row2 { grid-template-columns: minmax(0, 1fr); } }
+  .viewer .crop { background: var(--surface-2); border-radius: 8px; padding: 8px; display: flex; justify-content: center; }
+  .viewer .crop img { width: 100%; max-width: 480px; image-rendering: pixelated; display: block; }
+  .viewer dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
+  .viewer dt { color: var(--ink-2); }
+  .viewer dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .viewer .nav { display: flex; gap: 6px; }
 </style>
 </head>
 <body>
@@ -234,12 +256,12 @@
   </header>
 
   <section class="kpis">
-    <div class="kpi"><div class="lbl">FPS cámara / procesados</div><div class="val" id="k-fps">—</div><div class="hint" id="k-fps-h">frame_skip —</div></div>
+    <div class="kpi" id="kpi-fps"><div class="lbl">FPS cámara / procesados</div><div class="val" id="k-fps">—</div><div class="hint" id="k-fps-h">—</div></div>
+    <div class="kpi" id="kpi-age"><div class="lbl">Retraso real (captura → resultado)</div><div class="val" id="k-age">—</div><div class="hint" id="k-age-h">p50 · p95</div></div>
     <div class="kpi"><div class="lbl">Tiempo por frame procesado</div><div class="val" id="k-lat">—</div><div class="hint" id="k-lat-h">p50 · p95</div></div>
     <div class="kpi"><div class="lbl">Tiempo hasta lectura</div><div class="val" id="k-ttr">—</div><div class="hint" id="k-ttr-h">media desde 1ª detección</div></div>
     <div class="kpi"><div class="lbl">Vehículos leídos</div><div class="val" id="k-rate">—</div><div class="hint" id="k-rate-h">leídos / (leídos + perdidos)</div></div>
     <div class="kpi"><div class="lbl">Aciertos (verdad marcada)</div><div class="val" id="k-acc">—</div><div class="hint" id="k-acc-h">escribe la matrícula real en la tabla</div></div>
-    <div class="kpi"><div class="lbl">Lectura de frames</div><div class="val" id="k-read">—</div><div class="hint" id="k-read-h">tiempo de camera.read_frame</div></div>
   </section>
 
   <section class="grid g-2">
@@ -315,7 +337,7 @@
     <div class="scroll">
       <table>
         <thead><tr>
-          <th>#</th><th>Hora</th><th>Recorte</th><th>Resultado</th><th>Matrícula</th><th>Real</th>
+          <th>#</th><th>Hora</th><th>Capturas</th><th>Resultado</th><th>Matrícula</th><th>Real</th>
           <th class="n">T. lectura</th><th class="n">Duración</th><th class="n">Frames</th><th class="n">Lecturas OCR</th>
           <th class="n">Conf. det</th><th>Lecturas más frecuentes</th>
         </tr></thead>
@@ -333,7 +355,7 @@
         <thead><tr>
           <th>Hora</th><th class="n">Frame</th><th class="n">Sesión</th><th class="n">Conf. det</th><th>Bbox (px)</th>
           <th>OCR</th><th class="n">Conf. OCR</th><th>Decisión</th>
-          <th class="n">Lectura</th><th class="n">Detector</th><th class="n">OCR</th><th class="n">Valid.</th><th class="n">Total</th>
+          <th class="n">Desc.</th><th class="n">Retraso</th><th class="n">Detector</th><th class="n">OCR</th><th class="n">Valid.</th><th class="n">Total</th>
         </tr></thead>
         <tbody id="t-log"></tbody>
       </table>
@@ -341,7 +363,7 @@
   </section>
 </div>
 
-<div class="modal" id="modal"><img alt=""></div>
+<div class="modal" id="modal"><div class="viewer" id="viewer"></div></div>
 
 <script>
 (() => {
@@ -520,17 +542,26 @@
   function renderKpis() {
     const s = st.stats;
     if (s) {
+      const c = s.counters || {};
       $('k-fps').innerHTML = `${fmtNum(s.fps_camera)} <small>/ ${fmtNum(s.fps_processed)}</small>`;
-      $('k-fps-h').textContent = `frame_skip ${s.config?.frame_skip ?? '—'} · nulos ${s.counters?.frames_nulos || 0}`;
+      const leidos = c.frames_leidos || 0, desc = c.frames_descartados || 0;
+      const camFps = s.config?.camera_fps;
+      // Si la RPi no decodifica el RTSP al ritmo de la cámara, el retraso lo mete la decodificación
+      const lento = camFps && s.fps_camera > 0 && s.fps_camera < camFps * 0.8;
+      $('kpi-fps').classList.toggle('alert', !!lento);
+      $('k-fps-h').textContent = lento
+        ? `⚠ la cámara envía ${camFps} fps y solo se decodifican ${fmtNum(s.fps_camera)}`
+        : `descartados ${leidos ? Math.round(desc * 100 / leidos) : 0}% · nulos ${c.frames_nulos || 0}`;
+      const age = s.timings?.age;
+      $('k-age').innerHTML = age ? fmtMs(age.avg) : '—';
+      $('k-age-h').textContent = age ? `p50 ${fmtMs(age.p50)} · p95 ${fmtMs(age.p95)} · máx ${fmtMs(age.max)}` : 'p50 · p95';
+      $('kpi-age').classList.toggle('alert', !!(age && age.p95 > 1000));
       const t = s.timings?.total;
       $('k-lat').innerHTML = t ? `${fmtMs(t.avg)}` : '—';
       $('k-lat-h').textContent = t ? `p50 ${fmtMs(t.p50)} · p95 ${fmtMs(t.p95)} · máx ${fmtMs(t.max)}` : 'p50 · p95';
       const ttr = s.timings?.time_to_read;
       $('k-ttr').innerHTML = ttr ? fmtMs(ttr.avg) : '—';
       $('k-ttr-h').textContent = ttr ? `p50 ${fmtMs(ttr.p50)} · p95 ${fmtMs(ttr.p95)} · n ${ttr.n}` : 'media desde 1ª detección';
-      const r = s.timings?.read;
-      $('k-read').innerHTML = r ? fmtMs(r.avg) : '—';
-      $('k-read-h').textContent = r ? `p95 ${fmtMs(r.p95)} · máx ${fmtMs(r.max)}` : 'tiempo de camera.read_frame';
     }
     const minFrames = $('f-short').checked ? 2 : 1;
     const ss = closedSessions().filter((x) => x.frames >= minFrames);
@@ -544,8 +575,10 @@
   }
 
   const STAGES = [
-    ['read', 'Lectura cámara'], ['detect', 'Detector'], ['ocr', 'OCR'],
+    ['read', 'Intervalo entre frames (cámara)'], ['wait', 'Espera hasta procesar'],
+    ['detect', 'Detector'], ['ocr', 'OCR'],
     ['validate', 'Validator'], ['store', 'Fingerprint + guardado'], ['total', 'Total frame'],
+    ['age', 'Retraso captura → resultado'],
     ['time_to_read', 'Hasta lectura (por vehículo)'],
   ];
   function renderTimings() {
@@ -559,7 +592,8 @@
 
   const COUNTERS = [
     ['frames_leidos', 'Frames leídos'], ['frames_nulos', 'Frames nulos'],
-    ['frames_procesados', 'Frames procesados'], ['detecciones', 'Con matrícula detectada'],
+    ['frames_procesados', 'Frames procesados'], ['frames_descartados', 'Frames descartados (más nuevos)'],
+    ['detecciones', 'Con matrícula detectada'], ['decision_ocr_vacio', 'Detección sin texto OCR'],
     ['ocr_ok', 'OCR con texto'], ['ocr_vacio', 'OCR vacío'],
     ['decision_baja_confianza', 'Descartes baja confianza'], ['decision_acumulando', 'Votos acumulando'],
     ['decision_sin_consenso', 'Sin consenso'], ['decision_cooldown', 'Bloqueos cooldown'],
@@ -628,9 +662,19 @@
   }
 
   // ── Render: sesiones ────────────────────────────────────────────────────────
-  function renderSessions() {
+  const capUrl = (name) => name ? `${HTTP}/api/debug/captures/${encodeURIComponent(name)}` : '';
+  function capsCell(s) {
+    if (!s.capture_full && !s.capture_crop) return '<span class="dim">—</span>';
+    return `<div class="caps" data-session="${s.id}">
+      ${s.capture_full ? `<img class="cap-full" loading="lazy" src="${capUrl(s.capture_full)}" alt="vehículo" title="Ver captura">` : ''}
+      ${s.capture_crop ? `<img class="cap-crop" loading="lazy" src="${capUrl(s.capture_crop)}" alt="matrícula" title="Ver captura">` : ''}</div>`;
+  }
+  function visibleSessions() {
     const minFrames = $('f-short').checked ? 2 : 1;
-    const list = closedSessions().filter((s) => s.frames >= minFrames).sort((a, b) => b.id - a.id);
+    return closedSessions().filter((s) => s.frames >= minFrames).sort((a, b) => b.id - a.id);
+  }
+  function renderSessions() {
+    const list = visibleSessions();
     $('t-sessions').innerHTML = list.length ? list.map((s) => {
       const key = sessionKey(s), truth = truths[key] || '';
       let cmp = '';
@@ -638,7 +682,7 @@
       const reads = (s.readings || []).map((r) => `<span class="mono">${esc(r.text)}</span> <span class="dim">×${r.n} (${fmtConf(r.conf_avg)})</span>`).join(', ');
       return `<tr>
         <td class="n">${s.id}</td><td>${fmtClock(s.start)}</td>
-        <td>${s.best_crop ? `<img class="thumb" src="${imgSrc(s.best_crop)}" alt="">` : '<span class="dim">—</span>'}</td>
+        <td>${capsCell(s)}</td>
         <td>${badge(s.result)}</td>
         <td class="mono">${esc(s.plate || '—')}</td>
         <td><input class="truth" data-key="${key}" value="${esc(truth)}" placeholder="real" spellcheck="false"> ${cmp}</td>
@@ -676,7 +720,7 @@
       <td class="mono">${esc(f.validator?.text || f.ocr_text || '')}</td>
       <td class="n">${f.ocr_conf != null ? fmtConf(f.ocr_conf) : ''}</td>
       <td>${badge(dec)}</td>
-      <td class="n">${fmtNum(f.t_read_ms)}</td><td class="n">${fmtNum(f.t_detect_ms)}</td>
+      <td class="n">${f.dropped || ''}</td><td class="n">${fmtNum(f.age_ms)}</td><td class="n">${fmtNum(f.t_detect_ms)}</td>
       <td class="n">${f.t_ocr_ms != null ? fmtNum(f.t_ocr_ms) : ''}</td>
       <td class="n">${f.t_validate_ms != null ? fmtNum(valMs, 2) : ''}</td>
       <td class="n"><b>${fmtNum(f.t_total_ms)}</b></td>`;
@@ -863,7 +907,8 @@
      <div>${sw('--s-detect')}<span class="k">Detector</span> <b>${fmtNum(f.t_detect_ms)} ms</b></div>
      <div>${sw('--s-ocr')}<span class="k">OCR</span> <b>${f.t_ocr_ms != null ? fmtNum(f.t_ocr_ms) + ' ms' : '—'}</b></div>
      <div>${sw('--s-validate')}<span class="k">Validator + guardado</span> <b>${f.t_validate_ms != null ? fmtNum((f.t_validate_ms || 0) + (f.t_store_ms || 0), 2) + ' ms' : '—'}</b></div>
-     <div><span class="k">Total</span> <b>${fmtNum(f.t_total_ms)} ms</b> · <span class="k">lectura</span> <b>${fmtNum(f.t_read_ms)} ms</b></div>`);
+     <div><span class="k">Total</span> <b>${fmtNum(f.t_total_ms)} ms</b> · <span class="k">retraso</span> <b>${fmtNum(f.age_ms)} ms</b></div>
+     ${f.dropped ? `<div><span class="k">Frames descartados antes</span> <b>${f.dropped}</b></div>` : ''}`);
   bindHover('ch-conf', 'conf', (f) =>
     `<div><b>Frame ${f.frame_id}</b> <span class="k">${fmtTime(f.ts)}</span></div>
      ${f.detected ? `<div>${sw('--s-detect')}<span class="k">Detector</span> <b>${fmtConf(f.det_conf)}</b></div>
@@ -889,6 +934,8 @@
         frames_hasta_lectura: s.frames_to_read ?? '', lecturas_ocr: s.ocr_reads,
         lecturas_distintas: s.n_distinct_readings, conf_det_max: s.best_det_conf,
         conf_ocr_aceptada: s.accepted_conf ?? '',
+        frames_sin_deteccion: s.missed_total ?? '', color: s.fingerprint?.color || '',
+        captura_vehiculo: s.capture_full || '', captura_matricula: s.capture_crop || '',
         lecturas: (s.readings || []).map((r) => `${r.text}x${r.n}`).join(' '),
       };
     });
@@ -932,10 +979,64 @@
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', scheduleCharts);
   window.addEventListener('resize', scheduleCharts);
 
+  // Visor de capturas: vehículo completo + matrícula recortada de una sesión
+  let viewerId = null;
+  function openViewer(id) {
+    const s = st.sessions.get(id);
+    if (!s) return;
+    viewerId = id;
+    const truth = truths[sessionKey(s)];
+    const ok = truth ? (s.plate && norm(s.plate) === norm(truth)) : null;
+    const reads = (s.readings || []).map((r) => `<span class="mono">${esc(r.text)}</span> <span class="dim">×${r.n} (${fmtConf(r.conf_avg)})</span>`).join('<br>');
+    const votes = s.votes_at_accept ? Object.entries(s.votes_at_accept).sort((a, b) => b[1] - a[1])
+      .map(([t, w]) => `<span class="mono">${esc(t)}</span> <span class="dim">${w.toFixed(2)}</span>`).join(' · ') : '—';
+    $('viewer').innerHTML = `
+      <div class="top">
+        <span class="plate">${esc(s.plate || 'Sin lectura')}</span>${badge(s.result)}
+        ${truth ? `<span class="${ok ? 'ok-ink' : 'ko-ink'}">${ok ? '✓' : '✗'} real ${esc(truth)}</span>` : ''}
+        <span class="dim">Sesión #${s.id} · ${fmtClock(s.start)}</span>
+        <span class="close nav"><button data-nav="1" title="Más reciente (←)">←</button><button data-nav="-1" title="Más antigua (→)">→</button><button data-close>Cerrar</button></span>
+      </div>
+      <div class="full">${s.capture_full ? `<img src="${capUrl(s.capture_full)}" alt="captura del vehículo">` : '<div class="ph" style="padding:40px;color:#898781">Sin captura</div>'}</div>
+      <div class="row2">
+        <div class="crop">${s.capture_crop ? `<img src="${capUrl(s.capture_crop)}" alt="matrícula">` : '<span class="dim">Sin recorte</span>'}</div>
+        <dl>
+          <dt>Tiempo hasta lectura</dt><dd>${fmtMs(s.time_to_read_ms)}${s.frames_to_read ? ` · ${s.frames_to_read} frames` : ''}</dd>
+          <dt>Duración en imagen</dt><dd>${fmtMs(s.duration_ms)} · ${s.frames} frames · ${s.missed_total || 0} sin detección</dd>
+          <dt>Conf. detector máx</dt><dd>${fmtConf(s.best_det_conf)}</dd>
+          <dt>Conf. OCR aceptada</dt><dd>${fmtConf(s.accepted_conf)}</dd>
+          <dt>Recorte</dt><dd>${s.capture_bbox ? `bbox ${s.capture_bbox.join(',')} · ${s.capture_bbox[2] - s.capture_bbox[0]}×${s.capture_bbox[3] - s.capture_bbox[1]} px en ${s.capture_wh ? s.capture_wh.join('×') : '?'}` : '—'}</dd>
+          <dt>Color</dt><dd>${esc(s.fingerprint?.color || '—')}</dd>
+          <dt>Voting al aceptar</dt><dd>${votes}</dd>
+          <dt>Lecturas OCR</dt><dd>${reads || '—'}</dd>
+        </dl>
+      </div>`;
+    $('modal').classList.add('show');
+  }
+  function navViewer(dir) {
+    const list = visibleSessions();
+    const i = list.findIndex((s) => s.id === viewerId);
+    const next = list[i - dir];
+    if (next) openViewer(next.id);
+  }
+  const closeModal = () => { $('modal').classList.remove('show'); viewerId = null; };
   document.addEventListener('click', (e) => {
-    if (e.target.matches('img.thumb, #cur-crop img')) {
-      $('modal').querySelector('img').src = e.target.src; $('modal').classList.add('show');
-    } else if (e.target.closest('#modal')) $('modal').classList.remove('show');
+    const caps = e.target.closest('.caps');
+    if (caps) { openViewer(Number(caps.dataset.session)); return; }
+    if (e.target.matches('#cur-crop img')) {
+      viewerId = null;
+      $('viewer').innerHTML = `<div class="top"><b>Último recorte</b><span class="close nav"><button data-close>Cerrar</button></span></div><div class="crop"><img src="${e.target.src}" alt=""></div>`;
+      $('modal').classList.add('show'); return;
+    }
+    const nav = e.target.closest('[data-nav]');
+    if (nav) { navViewer(Number(nav.dataset.nav)); return; }
+    if (e.target.closest('[data-close]') || e.target.id === 'modal') closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!$('modal').classList.contains('show')) return;
+    if (e.key === 'Escape') closeModal();
+    else if (viewerId != null && e.key === 'ArrowLeft') navViewer(1);
+    else if (viewerId != null && e.key === 'ArrowRight') navViewer(-1);
   });
   setInterval(renderCurrentSession, 500);
 

@@ -10,6 +10,7 @@ class Validator:
       self.votes = {}        # { "6630FGV": 1.87 }
       self.cooldown = {}     # { "6630FGV": timestamp }
       self.frame_count = 0
+      self.missed = 0        # frames seguidos sin detección
       self.last_decision = None  # motivo de la última decisión (para el dashboard de depuración)
 
   def validate(self, texto, confianza, vehiculo_presente=True):
@@ -21,13 +22,25 @@ class Validator:
           texto (str): Texto leído por el OCR.
           confianza (float): Confianza de la lectura entre 0 y 1.
           vehiculo_presente (bool): Si el detector ve un vehículo en el frame.
+              Un fallo puntual del detector no resetea el voting: solo se
+              resetea tras más de detection.max_missed_frames frames seguidos
+              sin detección (por defecto 2).
 
       Returns:
           str: Matrícula aceptada o None si no hay resultado todavía.
       """
-      # Reset si el vehículo desapareció
+      # Reset si el vehículo desapareció (tolerando fallos puntuales del detector)
       if not vehiculo_presente:
-          self.reset()
+          self.missed += 1
+          if self.missed > config['detection'].get('max_missed_frames', 2) and self.votes:
+              logger.debug(f"Vehículo perdido tras {self.missed} frames sin detección.")
+              self.reset()
+          return None
+      self.missed = 0
+
+      # Detección sin lectura OCR: el vehículo sigue ahí pero no hay voto
+      if texto is None:
+          self._set_decision('ocr_vacio', None)
           return None
 
       # Capa 1: filtro threshold
@@ -76,7 +89,7 @@ class Validator:
       del voting en ese momento. Solo informativo, para depuración.
 
       Args:
-          decision (str): baja_confianza | acumulando | sin_consenso | cooldown | aceptada.
+          decision (str): ocr_vacio | baja_confianza | acumulando | sin_consenso | cooldown | aceptada.
           texto (str): Texto de la lectura tras limpieza/corrección.
           ganador (str|None): Matrícula ganadora si la hay.
       """
@@ -307,4 +320,5 @@ class Validator:
       """
       self.votes = {}
       self.frame_count = 0
+      self.missed = 0
       logger.debug("Voting reseteado.")

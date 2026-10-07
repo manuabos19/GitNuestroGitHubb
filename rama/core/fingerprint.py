@@ -90,14 +90,11 @@ class Fingerprint:
         # El 40% evita coger el cielo o el techo del parking
         # El 30% del ancho por el angulo de la camara
         top = max(0, int(h * 0.40))
-        right = max(0, int(w*0.30))
-        bottom = max(top + 10, plate_y1)
-        print(top)
-        zone = frame[top:300, right:]
+        left = max(0, int(w * 0.30))
+        bottom = min(h, max(top + 10, plate_y1))
+        zone = frame[top:bottom, left:]
 
-        cv2.imwrite('tests/pruebas/extraccion.jpg', zone)
-
-        logger.debug(f"Zona carrocería extraída: y={top} a y={bottom}")
+        logger.debug(f"Zona carrocería extraída: y={top} a y={bottom}, x desde {left}")
         return zone
 
     def detect_color(self, frame, plate_y1=None):
@@ -118,6 +115,9 @@ class Fingerprint:
                       determinar con suficiente certeza.
         """
         zone = self._extract_vehicle_zone(frame, plate_y1)
+        if zone.size == 0:
+            logger.debug("Zona de carrocería vacía, no se puede clasificar el color.")
+            return None
         hsv = cv2.cvtColor(zone, cv2.COLOR_BGR2HSV)
 
         pixel_counts = {}

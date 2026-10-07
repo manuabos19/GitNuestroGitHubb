@@ -6,7 +6,7 @@ import uvicorn
 
 from core.eqbroker import EQbrokerClient
 from core.pipeline import Pipeline
-from api.routes.websocket import stream_loop
+from api.routes.websocket import set_stream_queue
 
 
 def setup_logging():
@@ -80,15 +80,16 @@ if __name__ == "__main__":
     """
     Punto de entrada principal del sistema RAMA.
 
-    Arranca tres hilos en paralelo:
+    Arranca cuatro hilos en paralelo:
       - Hilo principal:   pipeline síncrono (cámara → detector → OCR → validator)
-      - Hilo asyncio:     event loop asyncio (EQbroker, heartbeat, discovery, stream)
-      - Hilo uvicorn:     servidor FastAPI (API REST + WebSocket /ws/camera)
+      - Hilo asyncio:     event loop asyncio (EQbroker, heartbeat, discovery)
+      - Hilo uvicorn:     servidor FastAPI (API REST + WebSockets /ws/camera y /ws/debug)
+      - Hilo cámara:      lectura continua del RTSP, guarda solo el último frame
 
     La comunicación entre hilos se hace a través de dos queue.Queue:
       - cola:        el pipeline mete eventos de detección, asyncio los publica en EQbroker
-      - cola_stream: el pipeline mete frames redimensionados, asyncio los
-                     envía por WebSocket a los clientes del dashboard
+      - cola_stream: el pipeline mete frames redimensionados, el loop de
+                     uvicorn los envía por WebSocket a los clientes del dashboard
     """
     setup_logging()
     logger = logging.getLogger(__name__)
@@ -120,9 +121,11 @@ if __name__ == "__main__":
     asyncio.run_coroutine_threadsafe(eqbroker.iniciar(), loop)
     asyncio.run_coroutine_threadsafe(consumir_cola(cola, eqbroker), loop)
 
-    # Lanzar el stream de cámara para el dashboard
-    asyncio.run_coroutine_threadsafe(stream_loop(cola_stream), loop)
-    logger.info("EQbroker, consumidor de cola y stream de cámara lanzados.")
+    logger.info("EQbroker y consumidor de cola lanzados.")
+
+    # El stream de cámara se lanza en el loop de uvicorn (ver api/main.py),
+    # aquí solo se le pasa la cola antes de arrancar el servidor
+    set_stream_queue(cola_stream)
 
     # Hilo uvicorn: API REST + WebSocket
     hilo_uvicorn = threading.Thread(

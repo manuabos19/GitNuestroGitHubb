@@ -64,6 +64,33 @@ class CameraManager:
 
 camera_manager = CameraManager()
 
+# Cola de frames del pipeline, la registra main.py antes de arrancar uvicorn
+_cola_stream = None
+
+
+def set_stream_queue(cola_stream: queue.Queue):
+    """
+    Registra la cola de frames que alimenta el stream de cámara.
+
+    stream_loop se lanza en el arranque de la app (event loop de uvicorn),
+    el mismo loop que acepta las conexiones WebSocket. Enviar desde otro
+    event loop (el de hilo-asyncio) no es seguro entre hilos.
+
+    Args:
+        cola_stream (queue.Queue): Cola compartida con el pipeline.
+    """
+    global _cola_stream
+    _cola_stream = cola_stream
+
+
+def start_stream():
+    """Lanza stream_loop en el event loop actual (el de uvicorn)."""
+    if _cola_stream is None:
+        logger.warning("Sin cola de stream registrada — /ws/camera no enviará frames.")
+        return
+    asyncio.get_running_loop().create_task(stream_loop(_cola_stream))
+    logger.info("Stream de cámara arrancado en el loop de uvicorn.")
+
 
 @router.websocket('/ws/camera')
 async def websocket_camera(websocket: WebSocket):

@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import queue
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from core.telemetry import telemetry
 
@@ -67,9 +67,24 @@ async def get_debug_snapshot():
     return telemetry.snapshot()
 
 
+@router.get('/api/debug/captures/{filename}')
+async def get_debug_capture(filename: str):
+    """
+    Sirve una captura guardada de un paso de vehículo
+    (<fecha>_s<id>_full.jpg o <fecha>_s<id>_crop.jpg).
+
+    Raises:
+        HTTPException 404: Si la captura no existe (o ya se purgó).
+    """
+    ruta = telemetry.ruta_captura(filename)
+    if ruta is None:
+        raise HTTPException(status_code=404, detail="Captura no encontrada.")
+    return FileResponse(ruta, media_type="image/jpeg")
+
+
 @router.post('/api/debug/reset')
 async def reset_debug():
-    """Pone a cero contadores, históricos y sesiones de la telemetría."""
+    """Pone a cero contadores e históricos en memoria (las capturas en disco se conservan)."""
     telemetry.reset_contadores()
     logger.info("Telemetría reseteada desde el dashboard.")
     return {"status": "ok"}

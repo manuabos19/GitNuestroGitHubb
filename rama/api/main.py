@@ -25,5 +25,7 @@ app.include_router(debug.router)
 
 @app.on_event("startup")
 async def startup():
-    # El broadcaster de telemetría corre en el loop de uvicorn
+    # Stream de cámara y broadcaster de telemetría corren en el loop de uvicorn,
+    # el mismo que acepta las conexiones WebSocket
+    websocket.start_stream()
     debug.start_broadcaster()

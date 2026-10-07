@@ -48,6 +48,9 @@ class Camera:
         for attempt in range(1, self.max_retries + 1):
             logger.info(f"Conectando a la cámara, intento {attempt}/{self.max_retries}...")
             self.cap = cv2.VideoCapture(self.rtsp)
+            # Buffer mínimo: queremos el frame más reciente, no los acumulados
+            # (no todos los backends lo respetan; FrameGrabber lo garantiza igualmente)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             self.cap.set(cv2.CAP_PROP_FPS, self.fps)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution_height)
