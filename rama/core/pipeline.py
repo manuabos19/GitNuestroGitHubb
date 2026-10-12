@@ -16,6 +16,7 @@ from core.roi import Roi
 from core.tracker import PlateTracker
 from storage.json_store import JsonStore
 from core.telemetry import telemetry
+from core import state
 
 
 logger = logging.getLogger(__name__)
@@ -82,23 +83,32 @@ class Pipeline:
         # Stream del dashboard: solo visualización, no afecta a la detección
         stream_cfg = config.get('stream', {})
         self.stream_size = (stream_cfg.get('width', 320), stream_cfg.get('height', 180))
-        self.stream_interval = 1.0 / stream_cfg.get('fps', 10)
         self._last_stream = 0.0
         self._last_annotated = 0.0
 
         telemetry.registrar_colas(eqbroker=cola, stream=cola_stream)
         logger.info(f"Pipeline inicializado (OCR home_country={home_country}).")
 
+    @staticmethod
+    def _stream_interval():
+        """Segundos entre frames del stream según los fps que piden los clientes (None = nadie mira)."""
+        if state.stream_clients <= 0 or state.stream_fps <= 0:
+            return None
+        return 1.0 / state.stream_fps
+
     def _send_frame_to_stream(self, frame):
         """
         Redimensiona el frame, dibuja la ROI y lo mete en la cola del stream.
 
-        Si la cola está llena descarta el frame silenciosamente —
-        es normal bajo carga alta o si el dashboard no está conectado.
+        Si nadie está viendo el vídeo no hace nada: así la RPi no gasta CPU
+        en reducir y codificar frames que nadie va a recibir. Si la cola está
+        llena descarta el frame silenciosamente — es normal bajo carga alta.
 
         Args:
             frame (numpy.ndarray): Frame en formato BGR a enviar al stream.
         """
+        if self._stream_interval() is None:
+            return
         try:
             frame_small = cv2.resize(frame, self.stream_size)
             self.roi.dibujar(frame_small)
@@ -109,13 +119,15 @@ class Pipeline:
 
     def _stream_raw_frame(self, frame):
         """
-        Envía al stream los frames que lee la cámara, limitado a stream.fps.
+        Envía al stream los frames que lee la cámara, a los fps que pidan
+        los clientes conectados (ninguno = no se envía nada).
 
         Si hace poco se mandó un frame anotado (con bbox) no se manda el
         crudo, para que el recuadro no parpadee en el dashboard.
         """
+        intervalo = self._stream_interval()
         ahora = time.time()
-        if ahora - self._last_stream < self.stream_interval:
+        if intervalo is None or ahora - self._last_stream < intervalo:
             return
         if ahora - self._last_annotated < 0.5:
             return
@@ -170,7 +182,8 @@ class Pipeline:
 
             telemetry.frame_procesado(ev, crop_frame, annotated)
 
-            if ev.get("dets"):
+            intervalo = self._stream_interval()
+            if ev.get("dets") and intervalo is not None and time.time() - self._last_stream >= intervalo:
                 self._last_annotated = time.time()
                 self._send_frame_to_stream(annotated)
 

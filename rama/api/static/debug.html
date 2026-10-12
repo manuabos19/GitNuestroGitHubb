@@ -264,7 +264,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>RAMA · Depuración</h1>
+    <h1>RAMA · <span id="hdr-title">Depuración</span></h1>
     <span class="sub" id="hdr-sub">—</span>
     <div class="pills">
       <span class="pill"><span class="dot" id="dot-ws"></span><span id="lbl-ws">Telemetría</span></span>
@@ -428,8 +428,13 @@
   // Se puede apuntar a otra RPi con ?host=192.168.1.50:8000
   const params = new URLSearchParams(location.search);
   const HOST = params.get('host') || (location.protocol.startsWith('http') ? location.host : 'localhost:8000');
-  const HTTP = `${location.protocol === 'https:' ? 'https' : 'http'}://${HOST}`;
-  const WS = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${HOST}`;
+  // Ruta base: '' si la página se sirve en /debug, o '/camara/parking1' si
+  // se abre a través del panel general en /camara/parking1/debug
+  const BASE = params.has('host') || !location.protocol.startsWith('http') ? '' : location.pathname.replace(/\/debug\/?$/, '').replace(/\/$/, '');
+  const HTTP = `${location.protocol === 'https:' ? 'https' : 'http'}://${HOST}${BASE}`;
+  const WS = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${HOST}${BASE}`;
+  // fps del vídeo que pide esta página (?fps=N); por defecto, el máximo de la RPi
+  const CAM_FPS = parseInt(params.get('fps'), 10) || null;
 
   const MAX_POINTS = 120;
   const MAX_LOG = 200;
@@ -546,7 +551,7 @@
   let camFrames = 0, camLastTick = performance.now();
   function connectCam() {
     if (!videoOn) return;
-    wsCam = new WebSocket(`${WS}/ws/camera`);
+    wsCam = new WebSocket(`${WS}/ws/camera${CAM_FPS ? `?fps=${CAM_FPS}` : ''}`);
     wsCam.binaryType = 'blob';
     wsCam.onopen = () => { camRetry = 1000; $('video-ph').textContent = 'Esperando vídeo…'; };
     wsCam.onmessage = (m) => {
@@ -582,6 +587,10 @@
   function renderHeader() {
     const s = st.stats; if (!s) return;
     const c = s.config || {};
+    if (c.site_name) {
+      $('hdr-title').textContent = c.site_name;
+      document.title = `RAMA · ${c.site_name}`;
+    }
     $('hdr-sub').textContent = `${c.camera_id || ''} · ${c.backend || '?'} · ${c.country || ''} · ROI ${c.roi?.enabled ? 'sí' : 'no'} · seguimiento ${c.tracking?.enabled ? 'sí' : 'no'} · activo ${fmtUptime(s.uptime_s)}`;
     syncConfig(c);
     setDot('dot-cam', s.system.camera_connected ? 'ok' : 'ko');

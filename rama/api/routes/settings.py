@@ -10,11 +10,18 @@ logger = logging.getLogger(__name__)
 
 SETTINGS_PATH = "config/settings.yaml"
 
+# La contraseña de la cámara nunca sale de la RPi: el GET devuelve esta
+# máscara y el POST la ignora, así un formulario que reenvía todos los
+# campos tal cual no borra la contraseña real.
+PASSWORD_MASK = "********"
+
 
 @router.get('/settings')
 async def get_settings():
     """
     Devuelve la configuración actual del sistema RAMA.
+
+    La contraseña de la cámara se devuelve enmascarada (PASSWORD_MASK).
 
     Returns:
         dict: Configuración completa leída desde settings.yaml.
@@ -23,7 +30,7 @@ async def get_settings():
     return {
         "camera_ip":            config['camera']['ip'],
         "camera_user":          config['camera']['user'],
-        "camera_password":      config['camera']['password'],
+        "camera_password":      PASSWORD_MASK if config['camera']['password'] else "",
         "camera_port":          config['camera']['port'],
         "camera_fps":           config['camera']['fps'],
         "camera_stream_path":   config['camera']['stream_path'],
@@ -104,7 +111,8 @@ async def update_settings(body: SettingsBody):
     Actualiza la configuración del sistema RAMA en memoria y en disco.
 
     Solo actualiza los campos que vienen en el body (no son None).
-    Los cambios se persisten en settings.yaml inmediatamente.
+    camera_password con el valor PASSWORD_MASK se ignora (es lo que
+    devuelve el GET). Los cambios se persisten en settings.yaml inmediatamente.
 
     Args:
         body (SettingsBody): Campos a actualizar. Los campos no enviados
@@ -117,7 +125,8 @@ async def update_settings(body: SettingsBody):
 
     if body.camera_ip           is not None: config['camera']['ip']                   = body.camera_ip
     if body.camera_user         is not None: config['camera']['user']                 = body.camera_user
-    if body.camera_password     is not None: config['camera']['password']             = body.camera_password
+    if body.camera_password     is not None and body.camera_password != PASSWORD_MASK:
+        config['camera']['password'] = body.camera_password
     if body.camera_port         is not None: config['camera']['port']                 = body.camera_port
     if body.camera_fps          is not None: config['camera']['fps']                  = body.camera_fps
     if body.camera_stream_path  is not None: config['camera']['stream_path']          = body.camera_stream_path

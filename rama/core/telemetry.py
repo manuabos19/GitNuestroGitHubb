@@ -58,6 +58,13 @@ def _jpg_b64(img, quality=85):
     return base64.b64encode(buffer.tobytes()).decode('ascii')
 
 
+def nombre_sitio():
+    """Nombre del parking/entrada: site_name en settings.yaml, o el nombre de la cámara."""
+    return (config.get('site_name')
+            or config['eqbroker'].get('camera_name')
+            or config['eqbroker'].get('camera_id'))
+
+
 class Telemetry:
     """
     Recoge métricas de depuración del pipeline para el dashboard de pruebas.
@@ -216,7 +223,10 @@ class Telemetry:
             frame (numpy.ndarray|None): Frame completo (anotado con el bbox).
         """
         ahora = time.time()
-        crop_b64 = _jpg_b64(crop) if crop is not None else None
+        # El recorte en base64 solo sirve para el dashboard en vivo: si no hay
+        # nadie conectado a /ws/debug no se codifica (las capturas de cada
+        # vehículo se guardan en disco igualmente al cerrar la sesión)
+        crop_b64 = _jpg_b64(crop) if crop is not None and state.debug_clients > 0 else None
 
         with self._lock:
             self.contadores['frames_procesados'] += 1
@@ -462,7 +472,63 @@ class Telemetry:
                 "camera_fps": config['camera'].get('fps'),
                 "camera_resolution": config['camera'].get('resolution'),
                 "camera_id": config['eqbroker'].get('camera_id'),
+                "site_name": nombre_sitio(),
             },
+        }
+
+    def resumen(self):
+        """
+        Resumen ligero para las tarjetas del panel general (GET /api/debug/summary).
+
+        Pensado para pedirse cada pocos segundos desde un servidor central:
+        no incluye frames ni imágenes, solo los nombres de las capturas.
+        Los porcentajes se calculan sobre las sesiones en memoria (las
+        últimas 300), ignorando las de 1 frame, igual que el dashboard.
+        """
+        st = self.stats()
+        with self._lock:
+            sesiones = [x for x in self.sesiones if x.get('frames', 0) >= 2]
+
+        leidas = sum(1 for x in sesiones if x.get('result') == 'leida')
+        perdidas = sum(1 for x in sesiones if x.get('result') == 'perdida')
+        ultima = next((x for x in reversed(sesiones) if x.get('result') == 'leida'), None)
+        tiempos = st["timings"]
+        abierta = st["open_session"]
+
+        return {
+            "ts": st["ts"],
+            "site_name": nombre_sitio(),
+            "camera_id": config['eqbroker'].get('camera_id'),
+            "camera_name": config['eqbroker'].get('camera_name'),
+            "uptime_s": st["uptime_s"],
+            "camera_connected": st["system"]["camera_connected"],
+            "eqbroker_connected": st["system"]["eqbroker_connected"],
+            "fps_camera": st["fps_camera"],
+            "fps_processed": st["fps_processed"],
+            "camera_fps_config": config['camera'].get('fps'),
+            "age_ms": {k: tiempos["age"][k] for k in ("p50", "p95")} if tiempos["age"] else None,
+            "time_to_read_ms": {k: tiempos["time_to_read"][k] for k in ("avg", "p95")} if tiempos["time_to_read"] else None,
+            "cpu_temp": st["system"]["cpu_temp"],
+            "load_avg": st["system"]["load_avg"],
+            "sessions": {
+                "leidas": leidas,
+                "perdidas": perdidas,
+                "cooldown": sum(1 for x in sesiones if x.get('result') == 'cooldown'),
+                "read_rate": round(leidas / (leidas + perdidas), 3) if leidas + perdidas else None,
+            },
+            "last_read": {
+                "plate": ultima.get("plate"),
+                "ts": ultima.get("start"),
+                "time_to_read_ms": ultima.get("time_to_read_ms"),
+                "on_exit": ultima.get("accepted_on_exit", False),
+                "capture_full": ultima.get("capture_full"),
+                "capture_crop": ultima.get("capture_crop"),
+            } if ultima else None,
+            "vehicle_present": abierta is not None,
+            "current_plate": abierta.get("plate") if abierta else None,
+            "roi_enabled": bool(st["config"]["roi"].get("enabled")),
+            "tracking_enabled": bool(st["config"]["tracking"].get("enabled")),
+            "viewers": {"stream": state.stream_clients, "debug": state.debug_clients},
         }
 
     def snapshot(self):

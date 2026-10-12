@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from config.config import config
+from core import state
 from core.telemetry import telemetry
 
 router = APIRouter()
@@ -36,11 +37,13 @@ class DebugManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.connections.append(websocket)
+        state.debug_clients = len(self.connections)
         logger.info(f"Cliente conectado a /ws/debug. Total: {len(self.connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.connections:
             self.connections.remove(websocket)
+            state.debug_clients = len(self.connections)
             logger.info(f"Cliente desconectado de /ws/debug. Total: {len(self.connections)}")
 
     async def broadcast(self, texto: str):
@@ -73,6 +76,17 @@ async def get_debug_snapshot():
         dict: {stats, frames, sessions}
     """
     return telemetry.snapshot()
+
+
+@router.get('/api/debug/summary')
+async def get_debug_summary():
+    """
+    Resumen ligero de esta RPi para el panel general (sin frames ni imágenes).
+
+    Returns:
+        dict: Nombre del parking, estado, fps, retraso, % leídos, última lectura...
+    """
+    return telemetry.resumen()
 
 
 @router.get('/api/debug/captures/{filename}')

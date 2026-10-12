@@ -32,7 +32,9 @@ Copiar sobre el proyecto RAMA respetando las rutas:
 | `core/detector_yolo.py` | Devuelve también el bbox; añade `detect_all()` |
 | `core/camera.py` | `CAP_PROP_BUFFERSIZE = 1` |
 | `core/fingerprint.py` | Corregido pero **sin usar** (lo dejo listo para cuando se active el color) |
-| `api/routes/websocket.py`, `api/main.py`, `main.py` | `stream_loop` pasa al loop de uvicorn (antes enviaba desde otro hilo) |
+| `api/routes/websocket.py`, `api/main.py`, `main.py` | `stream_loop` pasa al loop de uvicorn (antes enviaba desde otro hilo); cada cliente elige sus fps (`/ws/camera?fps=N`) |
+| `core/state.py` | Número de clientes del vídeo y del dashboard: sin nadie mirando no se prepara vídeo ni recortes |
+| `api/routes/settings.py` | `GET /api/settings` devuelve la contraseña de la cámara como `********`; el `POST` ignora ese valor |
 
 ## Configuración nueva (opcional, `settings.yaml`)
 
@@ -41,6 +43,8 @@ La ROI y el seguimiento se configuran mejor desde el dashboard: se aplican al
 momento y se guardan en `settings.yaml`.
 
 ```yaml
+site_name: "Parking Centro - Entrada 1"   # nombre en el dashboard y en el panel general
+
 detection:
   max_missed_frames: 2      # frames seguidos sin detección antes de dar el vehículo por ido
   roi:
@@ -59,12 +63,27 @@ tracking:
 stream:                     # solo el vídeo del dashboard, NO afecta a la detección
   width: 320
   height: 180
-  fps: 10
+  fps: 10                   # máximo; cada cliente puede pedir menos con ?fps=N
 
 debug:
   captures_path: debug_captures   # capturas + sesiones.jsonl
   max_captures: 1000              # ficheros jpg máximos (se borran los más antiguos)
 ```
+
+## Para el panel general
+
+- **Sin nadie mirando no se gasta CPU en vídeo**: la RPi solo reduce y
+  codifica frames si hay alguien conectado a `/ws/camera`, y solo a los fps
+  que pida (el más alto de los clientes). Cada frame se codifica una vez,
+  mire quien mire. Los recortes del dashboard en vivo igual: solo si hay
+  alguien en `/ws/debug`. Las capturas de cada vehículo se guardan siempre.
+- **`GET /api/debug/summary`**: resumen ligero para las tarjetas (nombre del
+  parking, estado de cámara y EQbroker, fps, retraso, % leídos, última
+  lectura con sus capturas, vehículo presente, temperatura, quién mira).
+- **`/debug` funciona bajo una ruta**: abierto como
+  `https://panel/camara/parking1/debug` usa `/camara/parking1/api/...` y
+  `/camara/parking1/ws/...`, así el panel general puede servirlo a través
+  de un proxy sin cambiar nada. `?fps=N` fija los fps del vídeo.
 
 ## Zona de detección (ROI)
 
