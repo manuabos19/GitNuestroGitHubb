@@ -189,8 +189,8 @@
   <section class="card">
     <h2>Parámetros <span class="meta">la carpeta se lee en este equipo; nada se sube a la RPi</span></h2>
     <div class="form">
-      <label class="field"><span>Desde</span><input type="datetime-local" id="f-desde" step="1"></label>
-      <label class="field"><span>Hasta</span><input type="datetime-local" id="f-hasta" step="1"></label>
+      <label class="field"><span>Lecturas de RAMA desde</span><input type="datetime-local" id="f-desde" step="1"></label>
+      <label class="field"><span>Lecturas de RAMA hasta</span><input type="datetime-local" id="f-hasta" step="1"></label>
       <div class="field"><span>Rango rápido</span>
         <div class="row">
           <button data-rango="hoy">Hoy</button><button data-rango="ayer">Ayer</button>
@@ -204,13 +204,10 @@
           <button id="btn-reload" class="hidden" title="Volver a leer la carpeta (si han llegado imágenes nuevas)">Volver a leer</button>
           <span class="name" id="folder-name">Ninguna (normalmente C:\matriculas)</span>
         </div>
-        <small>Nombre esperado: <span class="mono">S3,CAM4,260627010336569,3471LXM,9637.jpg</span> → sitio, cámara, fecha (AAMMDDhhmmssmmm), matrícula, …</small>
+        <small>Solo se usa la matrícula del nombre (4º campo): <span class="mono">S3,CAM4,260627010336569,<b>3471LXM</b>,9637.jpg</span></small>
         <input type="file" id="f-dir" webkitdirectory directory multiple class="hidden">
       </div>
-      <label class="field"><span>Sitio del otro sistema</span><select id="f-site"><option value="">Todos</option></select></label>
-      <label class="field"><span>Cámara del otro sistema</span><select id="f-cam"><option value="">Todas</option></select></label>
       <label class="field"><span>Distancia máxima para «posible misma matrícula»</span><input type="number" id="f-dist" min="1" max="4" step="1" value="2"></label>
-      <label class="field"><span>Ventana de tiempo máxima entre lecturas (min, 0 = sin límite)</span><input type="number" id="f-win" min="0" max="1440" step="1" value="0"></label>
     </div>
     <div class="actions">
       <button class="primary" id="btn-run">Validar</button>
@@ -224,7 +221,7 @@
       <div class="kpi"><div class="lbl">Coincidencias exactas</div><div class="val" id="k-ok">—</div><div class="hint">misma matrícula en el otro sistema</div></div>
       <div class="kpi"><div class="lbl">Posible misma matrícula</div><div class="val" id="k-pos">—</div><div class="hint" id="k-pos-h">distancia de Levenshtein ≤ 2</div></div>
       <div class="kpi"><div class="lbl">Sin pareja</div><div class="val" id="k-no">—</div><div class="hint">ni exacta ni parecida</div></div>
-      <div class="kpi"><div class="lbl">Lecturas del otro sistema</div><div class="val" id="k-otro">—</div><div class="hint" id="k-otro-h"></div></div>
+      <div class="kpi"><div class="lbl">Imágenes en la carpeta</div><div class="val" id="k-otro">—</div><div class="hint" id="k-otro-h"></div></div>
       <div class="kpi"><div class="lbl">Revisadas a mano</div><div class="val" id="k-rev">—</div><div class="hint" id="k-rev-h">RAMA correcta / otro correcto</div></div>
     </div>
 
@@ -235,7 +232,7 @@
         <div class="sec-body">
           <div class="scroll">
             <table>
-              <thead><tr><th>Hora RAMA</th><th>Matrícula</th><th>Hora otro sistema</th><th class="n">Diferencia</th><th>Fotos RAMA</th><th>Foto otro sistema</th><th>Fichero</th></tr></thead>
+              <thead><tr><th>Hora RAMA</th><th>Matrícula</th><th>Fotos RAMA</th><th>Foto otro sistema</th><th>Fichero</th></tr></thead>
               <tbody id="t-ok"></tbody>
             </table>
           </div>
@@ -259,20 +256,6 @@
       </details>
     </section>
 
-    <section class="card">
-      <details class="sec" id="sec-otro">
-        <summary>Solo en el otro sistema <span class="badge" id="c-otro">0</span><span class="meta">lecturas del otro sistema sin ninguna lectura de RAMA parecida (posibles vehículos no leídos)</span></summary>
-        <div class="sec-body">
-          <div class="scroll">
-            <table>
-              <thead><tr><th>Hora</th><th>Matrícula</th><th>Sitio</th><th>Cámara</th><th>Foto</th><th>Fichero</th></tr></thead>
-              <tbody id="t-otro"></tbody>
-            </table>
-          </div>
-          <button class="more hidden" id="more-otro">Mostrar más</button>
-        </div>
-      </details>
-    </section>
   </section>
 </div>
 
@@ -304,28 +287,16 @@
     const d = new Date(ts * 1000);
     return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   };
-  const fmtDelta = (s) => {
-    if (s == null) return '—';
-    const a = Math.abs(s), sg = s >= 0 ? '+' : '−';
-    if (a < 60) return `${sg}${a.toFixed(1)} s`;
-    if (a < 3600) return `${sg}${Math.floor(a / 60)} min ${Math.round(a % 60)} s`;
-    return `${sg}${(a / 3600).toFixed(1)} h`;
-  };
   const toLocalInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   const setStatus = (t, err = false) => { $('status').textContent = t; $('status').classList.toggle('err', err); };
 
   // ── Nombres de fichero del otro sistema ─────────────────────────────────────
-  // S3,CAM4,260627010336569,3471LXM,9637.jpg → sitio, cámara, AAMMDDhhmmssmmm, matrícula, resto
+  // S3,CAM4,260627010336569,3471LXM,9637.jpg → solo interesa la matrícula (4º campo)
   function parseNombre(nombre) {
-    const base = nombre.replace(/\.[^.]+$/, '');
-    const p = base.split(',');
+    const p = nombre.replace(/\.[^.]+$/, '').split(',');
     if (p.length < 4) return null;
-    const m = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{0,3})$/.exec(p[2].trim());
-    if (!m) return null;
-    const [, yy, mo, dd, hh, mi, ss, ms] = m;
-    const d = new Date(2000 + +yy, +mo - 1, +dd, +hh, +mi, +ss, +(ms || '0').padEnd(3, '0'));
-    if (isNaN(d.getTime())) return null;
-    return { site: p[0].trim(), cam: p[1].trim(), ts: d.getTime() / 1000, plateRaw: p[3].trim(), plate: norm(p[3]), extra: p.slice(4).join(',') };
+    const plate = norm(p[3]);
+    return plate ? { plateRaw: p[3].trim(), plate } : null;
   }
 
   // ── Lectura de la carpeta (en el navegador) ─────────────────────────────────
@@ -413,25 +384,11 @@
     } else {
       for (const f of carpeta.files) anadir(f.name, f.webkitRelativePath || f.name, async () => f);
     }
-    lista.sort((a, b) => a.ts - b.ts);
     otros = lista;
-    rellenarFiltros();
     mostrarCarpeta();
     setStatus(`Carpeta leída: ${lista.length.toLocaleString('es-ES')} imágenes con formato reconocido.`);
     return otros;
   }
-
-  function rellenarFiltros() {
-    const cuenta = (k) => otros.reduce((m, o) => (m[o[k]] = (m[o[k]] || 0) + 1, m), {});
-    for (const [sel, k, todos] of [['f-site', 'site', 'Todos'], ['f-cam', 'cam', 'Todas']]) {
-      const prev = store.get(`rama-val-${k}`, '') || $(sel).value;
-      const c = cuenta(k);
-      $(sel).innerHTML = `<option value="">${todos} (${otros.length})</option>` +
-        Object.keys(c).sort().map((v) => `<option value="${esc(v)}">${esc(v)} (${c[v]})</option>`).join('');
-      if (prev && c[prev]) $(sel).value = prev;
-    }
-  }
-  ['f-site', 'f-cam'].forEach((id, i) => $(id).addEventListener('change', () => store.set(`rama-val-${['site', 'cam'][i]}`, $(id).value)));
 
   // ── Levenshtein ─────────────────────────────────────────────────────────────
   // Distancia con corte: si ya supera `max`, devuelve max + 1 sin terminar.
@@ -470,57 +427,36 @@
   }
   const resaltar = (s, marcas) => [...s].map((c, i) => marcas[i] ? `<span class="d">${esc(c)}</span>` : esc(c)).join('');
 
-  // ── Comparación ─────────────────────────────────────────────────────────────
-  // 1) Coincidencia exacta: misma matrícula (y dentro de la ventana si hay).
-  //    Si una matrícula aparece varias veces, se emparejan por cercanía en el
-  //    tiempo, una con una.
-  // 2) Las lecturas de RAMA sin pareja exacta se comparan con las del otro
-  //    sistema que también quedaron sueltas: si la distancia de Levenshtein es
-  //    ≤ máximo, se enlazan como «posible misma matrícula» (la más parecida y,
-  //    a igualdad, la más cercana en el tiempo).
-  // 3) Lo que queda del otro sistema son vehículos que RAMA no leyó (o falsos
-  //    del otro sistema).
-  function emparejar(rama, otrosRango, maxDist, ventana) {
-    const okTiempo = (r, o) => !ventana || Math.abs(o.ts - r.ts) <= ventana;
-    const usadoR = new Set(), usadoO = new Set();
-
+  // ── Comparación (solo por matrícula) ────────────────────────────────────────
+  // 1) Coincidencia: hay al menos una imagen en la carpeta con la matrícula
+  //    leída por RAMA.
+  // 2) Si no, se busca la matrícula de la carpeta más parecida: si la
+  //    distancia de Levenshtein es ≤ máximo, «posible misma matrícula».
+  //    Si no hay ninguna, «sin pareja».
+  function emparejar(rama, lista, maxDist) {
     const porPlaca = new Map();
-    otrosRango.forEach((o, i) => { if (!porPlaca.has(o.plate)) porPlaca.set(o.plate, []); porPlaca.get(o.plate).push(i); });
-    const exactos = [];
-    rama.forEach((r, ri) => (porPlaca.get(norm(r.plate)) || []).forEach((oi) => {
-      if (okTiempo(r, otrosRango[oi])) exactos.push([Math.abs(otrosRango[oi].ts - r.ts), ri, oi]);
-    }));
-    exactos.sort((a, b) => a[0] - b[0]);
-    const ok = [];
-    for (const [, ri, oi] of exactos) {
-      if (usadoR.has(ri) || usadoO.has(oi)) continue;
-      usadoR.add(ri); usadoO.add(oi);
-      ok.push({ r: rama[ri], o: otrosRango[oi] });
+    for (const o of lista) {
+      if (!porPlaca.has(o.plate)) porPlaca.set(o.plate, []);
+      porPlaca.get(o.plate).push(o);
     }
-
-    const posibles = [];
-    rama.forEach((r, ri) => {
-      if (usadoR.has(ri)) return;
+    const placas = [...porPlaca.keys()];
+    const ok = [], no = [];
+    for (const r of rama) {
       const pr = norm(r.plate);
-      otrosRango.forEach((o, oi) => {
-        if (usadoO.has(oi) || !okTiempo(r, o)) return;
-        const d = lev(pr, o.plate, maxDist);
-        if (d <= maxDist) posibles.push([d, Math.abs(o.ts - r.ts), ri, oi]);
-      });
-    });
-    posibles.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    const no = [];
-    for (const [d, , ri, oi] of posibles) {
-      if (usadoR.has(ri) || usadoO.has(oi)) continue;
-      usadoR.add(ri); usadoO.add(oi);
-      no.push({ r: rama[ri], o: otrosRango[oi], dist: d });
+      const exactas = porPlaca.get(pr);
+      if (exactas) { ok.push({ r, o: exactas[0], n: exactas.length }); continue; }
+      let mejor = null, dMejor = maxDist + 1, empates = 0;
+      for (const pl of placas) {
+        const d = lev(pr, pl, maxDist);
+        if (d < dMejor) { dMejor = d; mejor = pl; empates = 1; }
+        else if (d === dMejor && mejor) empates++;
+      }
+      no.push(mejor
+        ? { r, o: porPlaca.get(mejor)[0], n: porPlaca.get(mejor).length, dist: dMejor, otras: empates - 1 }
+        : { r, o: null, dist: null });
     }
-    rama.forEach((r, ri) => { if (!usadoR.has(ri)) no.push({ r, o: null, dist: null }); });
-    no.sort((a, b) => (a.o ? 0 : 1) - (b.o ? 0 : 1) || a.r.ts - b.r.ts);
-
-    ok.sort((a, b) => a.r.ts - b.r.ts);
-    const soloOtro = otrosRango.filter((_, oi) => !usadoO.has(oi));
-    return { ok, no, soloOtro };
+    no.sort((a, b) => (a.o ? 0 : 1) - (b.o ? 0 : 1) || (a.dist || 0) - (b.dist || 0) || a.r.ts - b.r.ts);
+    return { ok, no };
   }
 
   // ── Revisión manual (se guarda en este navegador) ───────────────────────────
@@ -532,8 +468,8 @@
 
   // ── Ejecutar ────────────────────────────────────────────────────────────────
   let res = null;
-  const PAGINA = { ok: 100, no: 30, otro: 100 };
-  const mostrados = { ok: 0, no: 0, otro: 0 };
+  const PAGINA = { ok: 100, no: 30 };
+  const mostrados = { ok: 0, no: 0 };
 
   $('btn-run').onclick = async () => {
     const desde = new Date($('f-desde').value).getTime() / 1000;
@@ -542,8 +478,7 @@
     if (!carpeta) { setStatus('Elige primero la carpeta de imágenes del otro sistema.', true); return; }
     store.set('rama-val-rango', { desde: $('f-desde').value, hasta: $('f-hasta').value });
     const maxDist = Math.max(1, parseInt($('f-dist').value, 10) || 2);
-    const ventana = Math.max(0, parseFloat($('f-win').value) || 0) * 60;
-    store.set('rama-val-opts', { dist: maxDist, win: ventana / 60 });
+    store.set('rama-val-opts', { dist: maxDist });
 
     $('btn-run').disabled = true;
     try {
@@ -557,15 +492,11 @@
       revisiones = store.get(`rama-val-rev-${site}`, {});
       if (data.site_name) { $('hdr-title').textContent = `${data.site_name} · Validación`; document.title = `RAMA · ${data.site_name} · Validación`; }
 
-      const fs = $('f-site').value, fc = $('f-cam').value;
-      const margen = ventana || 0;
-      const otrosRango = lista.filter((o) => o.ts >= desde - margen && o.ts <= hasta + margen && o.plate
-        && (!fs || o.site === fs) && (!fc || o.cam === fc));
       setStatus('Comparando…');
       await new Promise((ok) => setTimeout(ok, 0));
-      res = { ...emparejar(data.lecturas, otrosRango, maxDist, ventana), rama: data.lecturas, otros: otrosRango, perdidas: data.perdidas, maxDist };
+      res = { ...emparejar(data.lecturas, lista, maxDist), rama: data.lecturas, otros: lista, perdidas: data.perdidas, maxDist };
       pintar();
-      setStatus(`Hecho: ${data.lecturas.length} lecturas de RAMA frente a ${otrosRango.length} del otro sistema.`);
+      setStatus(`Hecho: ${data.lecturas.length} lecturas de RAMA comparadas con ${lista.length.toLocaleString('es-ES')} imágenes de la carpeta.`);
     } catch (e) {
       setStatus('Error: ' + e.message, true);
     } finally {
@@ -584,15 +515,14 @@
     $('k-pos').innerHTML = `${Math.round(nPos * 100 / tot)}% <small>${nPos}</small>`;
     $('k-pos-h').textContent = `distancia de Levenshtein ≤ ${res.maxDist}`;
     $('k-no').innerHTML = `${Math.round(nNo * 100 / tot)}% <small>${nNo}</small>`;
-    $('k-otro').textContent = res.otros.length;
-    $('k-otro-h').textContent = `${res.soloOtro.length} sin ninguna lectura de RAMA parecida`;
+    $('k-otro').textContent = res.otros.length.toLocaleString('es-ES');
+    $('k-otro-h').textContent = `${new Set(res.otros.map((o) => o.plate)).size.toLocaleString('es-ES')} matrículas distintas`;
     $('c-ok').textContent = res.ok.length;
     $('c-no').textContent = res.no.length;
-    $('c-otro').textContent = res.soloOtro.length;
     pintarRevisadas();
-    mostrados.ok = mostrados.no = mostrados.otro = 0;
-    $('t-ok').innerHTML = ''; $('cards-no').innerHTML = ''; $('t-otro').innerHTML = '';
-    masOk(); masNo(); masOtro();
+    mostrados.ok = mostrados.no = 0;
+    $('t-ok').innerHTML = ''; $('cards-no').innerHTML = '';
+    masOk(); masNo();
   }
 
   function pintarRevisadas() {
@@ -621,10 +551,9 @@
     const tb = $('t-ok');
     for (const p of lote) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${fmtDT(p.r.ts)}</td><td class="mono">${esc(p.r.plate)}</td><td>${fmtDT(p.o.ts)}</td>
-        <td class="n">${fmtDelta(p.o.ts - p.r.ts)}</td>
+      tr.innerHTML = `<td>${fmtDT(p.r.ts)}</td><td class="mono">${esc(p.r.plate)}</td>
         <td><div class="thumbs">${p.r.capture_full ? `<img class="th full" loading="lazy" src="${capUrl(p.r.capture_full)}" alt="">` : ''}${p.r.capture_crop ? `<img class="th" loading="lazy" src="${capUrl(p.r.capture_crop)}" alt="">` : ''}${!p.r.capture_full && !p.r.capture_crop ? '<span class="dim">borrada</span>' : ''}</div></td>
-        <td class="ot"></td><td class="dim mono" style="font-size:12px">${esc(p.o.nombre)}</td>`;
+        <td class="ot"></td><td class="dim mono" style="font-size:12px">${esc(p.o.nombre)}${p.n > 1 ? ` <span>(+${p.n - 1} imágenes más)</span>` : ''}</td>`;
       tr.querySelector('.ot').appendChild(imgOtro(p.o, 'th full'));
       tb.appendChild(tr);
     }
@@ -651,7 +580,7 @@
     div.innerHTML = `
       <div class="head">
         ${p.o ? `<span class="badge b-pos">Posible · distancia ${p.dist}</span>` : '<span class="badge b-no">Sin pareja</span>'}
-        <span class="dim">RAMA ${fmtDT(p.r.ts)}${p.o ? ` · otro sistema ${fmtDT(p.o.ts)} (${fmtDelta(p.o.ts - p.r.ts)})` : ''}</span>
+        <span class="dim">RAMA ${fmtDT(p.r.ts)}${p.o && p.otras ? ` · hay ${p.otras} matrícula${p.otras > 1 ? 's' : ''} más a la misma distancia` : ''}</span>
       </div>
       <div class="sides">
         <div class="side">
@@ -664,9 +593,9 @@
           ${lecturasOcr ? `<div class="who"><span>Lecturas OCR: ${lecturasOcr}</span></div>` : ''}
         </div>
         <div class="side">
-          <div class="who"><b>Otro sistema</b>${p.o ? `<span>${esc(p.o.site)} · ${esc(p.o.cam)}</span>` : ''}</div>
+          <div class="who"><b>Otro sistema</b>${p.o && p.n > 1 ? `<span>${p.n} imágenes con esta matrícula</span>` : ''}</div>
           ${p.o ? `<div class="plate">${resaltar(po, mb)}</div><div class="imgs"></div><div class="who"><span class="mono">${esc(p.o.nombre)}</span></div>`
-                : `<div class="noimg">Ninguna lectura del otro sistema a distancia ≤ ${res.maxDist}${parseFloat($('f-win').value) ? ' dentro de la ventana de tiempo' : ''}</div>`}
+                : `<div class="noimg">Ninguna matrícula de la carpeta a distancia ≤ ${res.maxDist}</div>`}
         </div>
       </div>
       <div class="verdict"><span>¿Cuál está bien?</span>
@@ -698,20 +627,7 @@
   }
   $('f-filter').onchange = () => { if (!res) return; mostrados.no = 0; $('cards-no').innerHTML = ''; masNo(); };
 
-  function masOtro() {
-    const lote = res.soloOtro.slice(mostrados.otro, mostrados.otro + PAGINA.otro);
-    const tb = $('t-otro');
-    for (const o of lote) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${fmtDT(o.ts)}</td><td class="mono">${esc(o.plateRaw)}</td><td>${esc(o.site)}</td><td>${esc(o.cam)}</td><td class="ot"></td><td class="dim mono" style="font-size:12px">${esc(o.nombre)}</td>`;
-      tr.querySelector('.ot').appendChild(imgOtro(o, 'th full'));
-      tb.appendChild(tr);
-    }
-    mostrados.otro += lote.length;
-    cargarImagenesOtro(tb);
-    $('more-otro').classList.toggle('hidden', mostrados.otro >= res.soloOtro.length);
-  }
-  $('more-ok').onclick = masOk; $('more-no').onclick = masNo; $('more-otro').onclick = masOtro;
+  $('more-ok').onclick = masOk; $('more-no').onclick = masNo;
 
   // ── Exportar ────────────────────────────────────────────────────────────────
   $('btn-csv').onclick = (e) => {
@@ -724,12 +640,11 @@
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
     const filas = [
-      ...res.ok.map((p) => ['coincidencia', p.r.id, iso(p.r.ts), p.r.plate, iso(p.o.ts), p.o.plateRaw, p.o.nombre, 0, (p.o.ts - p.r.ts).toFixed(1), '']),
-      ...res.no.map((p) => [p.o ? 'posible' : 'sin_pareja', p.r.id, iso(p.r.ts), p.r.plate, iso(p.o?.ts), p.o?.plateRaw ?? '', p.o?.nombre ?? '',
-        p.dist ?? '', p.o ? (p.o.ts - p.r.ts).toFixed(1) : '', VEREDICTOS[revisiones[claveRev(p)]] || '']),
-      ...res.soloOtro.map((o) => ['solo_otro_sistema', '', '', '', iso(o.ts), o.plateRaw, o.nombre, '', '', '']),
+      ...res.ok.map((p) => ['coincidencia', p.r.id, iso(p.r.ts), p.r.plate, p.o.plateRaw, p.o.nombre, 0, '']),
+      ...res.no.map((p) => [p.o ? 'posible' : 'sin_pareja', p.r.id, iso(p.r.ts), p.r.plate, p.o?.plateRaw ?? '', p.o?.nombre ?? '',
+        p.dist ?? '', VEREDICTOS[revisiones[claveRev(p)]] || '']),
     ];
-    const cab = ['tipo', 'sesion_rama', 'hora_rama', 'matricula_rama', 'hora_otro', 'matricula_otro', 'fichero_otro', 'distancia', 'diferencia_s', 'revision'];
+    const cab = ['tipo', 'sesion_rama', 'hora_rama', 'matricula_rama', 'matricula_otro', 'fichero_otro', 'distancia', 'revision'];
     const q = (v) => /[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
     const csv = [cab.join(';'), ...filas.map((f) => f.map(q).join(';'))].join('\n');
     const a = document.createElement('a');
@@ -776,7 +691,7 @@
   const r0 = store.get('rama-val-rango', null);
   if (r0) { $('f-desde').value = r0.desde; $('f-hasta').value = r0.hasta; } else rango('hoy');
   const o0 = store.get('rama-val-opts', null);
-  if (o0) { $('f-dist').value = o0.dist; $('f-win').value = o0.win; }
+  if (o0) $('f-dist').value = o0.dist;
   // Carpeta recordada (solo con showDirectoryPicker): el permiso se pide al validar
   if (window.showDirectoryPicker) {
     idb.get('carpeta').then((h) => {

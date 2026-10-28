@@ -89,32 +89,22 @@ debug:
 ## Validación frente a otro sistema (`/validacion`)
 
 `http://IP_RPI:8000/validacion` (o el enlace «Validación» del dashboard).
+Solo compara **matrículas**: no usa fechas, horas ni otros campos del otro sistema.
 
-1. Elige el rango de fechas.
+1. Rango de fechas: qué **lecturas de RAMA** se revisan.
 2. «Elegir carpeta…»: la carpeta de imágenes del otro sistema (normalmente
    `C:\matriculas`). **La lee el navegador del equipo donde está**, la RPi no
-   necesita acceso a ella y no se sube nada. En Chrome/Edge sobre https o
-   localhost la carpeta se recuerda; sobre `http://IP_RPI` hay que elegirla
-   cada vez. Se leen también las subcarpetas.
-3. Nombres esperados: `S3,CAM4,260627010336569,3471LXM,9637.jpg` → sitio,
-   cámara, fecha `AAMMDDhhmmssmmm`, matrícula, resto. Los ficheros con otro
-   formato se ignoran (se indica cuántos). Se puede filtrar por sitio y cámara.
-4. «Validar». Para cada lectura aceptada por RAMA en el rango
-   (`sesiones.jsonl`, `GET /api/validacion/lecturas`):
-   - **Coincidencias**: existe un fichero con la misma matrícula. Si una
-     matrícula pasa varias veces se emparejan una a una por cercanía en el tiempo.
-   - **Sin coincidencia exacta**: se busca entre las lecturas del otro sistema
-     que quedaron sueltas la más parecida con distancia de Levenshtein ≤ 2
-     (configurable) → «posible misma matrícula», con las fotos de los dos
-     sistemas y los caracteres distintos marcados. Las que no tienen ninguna
-     parecida quedan como «sin pareja».
-   - **Solo en el otro sistema**: lecturas del otro sistema sin ninguna de
-     RAMA parecida (posibles vehículos que RAMA no leyó).
-5. En cada posible se marca cuál está bien (RAMA / otro / las dos mal / no es
+   necesita acceso a ella y no se sube nada. Se leen también las subcarpetas.
+   De cada nombre (`S3,CAM4,260627010336569,3471LXM,9637.jpg`) solo se usa la
+   matrícula (4º campo); se tienen en cuenta todas las imágenes de la carpeta.
+3. «Validar». Para cada lectura de RAMA en el rango:
+   - **Coincidencia**: hay alguna imagen en la carpeta con esa matrícula.
+   - **Posible misma matrícula**: no la hay, pero sí una con distancia de
+     Levenshtein ≤ 2 (configurable). Se muestran las fotos de RAMA (vehículo y
+     recorte) y la del otro sistema, con los caracteres distintos en rojo.
+   - **Sin pareja**: ninguna matrícula de la carpeta a esa distancia.
+4. En cada posible se marca cuál está bien (RAMA / otro / las dos mal / no es
    el mismo vehículo). Se guarda en el navegador y sale en el CSV.
-
-Opcional: «ventana de tiempo máxima» para emparejar solo lecturas separadas
-como mucho N minutos (0 = solo por matrícula dentro del rango).
 
 Las fotos de RAMA son las capturas de `debug_captures/`; las más antiguas se
 borran al pasar de `debug.max_captures` (1000 por defecto). Para validar
