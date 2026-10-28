@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAMA Validación</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --surface-2: #f0efec;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --accent: #2a78d6;
+    --diff-bg: rgba(208,59,59,0.16);
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+    --good-ink: #006300;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --surface-2: #232322;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255,255,255,0.10);
+      --accent: #3987e5;
+      --diff-bg: rgba(230,103,103,0.25);
+      --good-ink: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --accent: #3987e5;
+    --diff-bg: rgba(230,103,103,0.25);
+    --good-ink: #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1600px; margin: 0 auto; padding: 12px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 4px 0 12px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  a { color: var(--accent); }
+  button, .btn {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover, .btn:hover { background: var(--surface-2); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); background: var(--accent); }
+  button.on { background: var(--surface-2); border-color: var(--axis); font-weight: 600; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; min-width: 0; margin-bottom: 12px;
+  }
+  .card h2 {
+    font-size: 14px; font-weight: 600; margin: 0 0 10px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .card h2 .meta { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .card h2 .right { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; font-weight: 400; }
+
+  .form { display: grid; gap: 12px 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items: end; }
+  .field { display: grid; gap: 4px; min-width: 0; }
+  .field > span { font-size: 12px; color: var(--ink-2); }
+  .field small { font-size: 12px; color: var(--muted); }
+  input, select {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--page);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; min-width: 0;
+  }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .folder { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .folder .name { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  #status { font-size: 13px; color: var(--ink-2); }
+  #status.err { color: var(--critical); }
+
+  .kpis { display: grid; gap: 10px; margin-bottom: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .kpi .lbl { font-size: 12px; color: var(--ink-2); }
+  .kpi .val { font-size: 24px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+  .kpi .val small { font-size: 13px; font-weight: 400; color: var(--ink-2); }
+  .kpi .hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  details.sec > summary {
+    cursor: pointer; list-style: none; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  details.sec > summary::-webkit-details-marker { display: none; }
+  details.sec > summary::before { content: "▸"; color: var(--muted); }
+  details.sec[open] > summary::before { content: "▾"; }
+  details.sec > summary .meta { font-weight: 400; color: var(--muted); font-size: 12px; }
+  details.sec > summary .right { margin-left: auto; display: flex; gap: 6px; font-weight: 400; }
+  .sec-body { margin-top: 10px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+  th { font-weight: 600; color: var(--ink-2); font-size: 12px; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--mono); }
+  .dim { color: var(--muted); }
+  .scroll { overflow: auto; max-height: 520px; }
+  td img.th { height: 34px; max-width: 120px; border-radius: 3px; display: block; cursor: zoom-in; background: #000; object-fit: cover; }
+  td img.th.full { width: 60px; }
+  .thumbs { display: flex; gap: 4px; align-items: center; }
+
+  .cards { display: grid; gap: 12px; }
+  .pair {
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--page);
+    display: grid; gap: 8px;
+  }
+  .pair .head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .pair .sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  @media (max-width: 760px) { .pair .sides { grid-template-columns: minmax(0, 1fr); } }
+  .side { display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .side .who { font-size: 12px; color: var(--ink-2); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+  .side .plate { font-family: var(--mono); font-size: 24px; font-weight: 700; letter-spacing: 1px; overflow-wrap: anywhere; }
+  .side .plate .d { background: var(--diff-bg); color: var(--critical); border-radius: 3px; }
+  .side .imgs { display: grid; gap: 6px; }
+  .side img { width: 100%; border-radius: 6px; background: #000; cursor: zoom-in; display: block; }
+  .side img.full { aspect-ratio: 16 / 9; object-fit: contain; }
+  .side img.crop { max-height: 90px; object-fit: contain; background: var(--surface-2); image-rendering: pixelated; }
+  .side .noimg { border-radius: 6px; background: var(--surface-2); color: var(--muted); font-size: 12px; padding: 24px 8px; text-align: center; }
+  .verdict { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .verdict span { font-size: 12px; color: var(--ink-2); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); white-space: nowrap;
+  }
+  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .b-ok::before { background: var(--good); }
+  .b-pos::before { background: var(--warning); }
+  .b-no::before { background: var(--critical); }
+  .more { margin-top: 10px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  .hidden { display: none !important; }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+  .modal.show { display: flex; }
+  .modal img { max-width: 100%; max-height: 90vh; background: #000; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>RAMA · <span id="hdr-title">Validación</span></h1>
+    <span class="sub" id="hdr-sub">Comparar lecturas con otro sistema</span>
+    <span class="spacer"></span>
+    <a class="btn" id="lnk-debug" href="debug">Depuración</a>
+    <button id="btn-theme">Tema</button>
+  </header>
+
+  <section class="card">
+    <h2>Parámetros <span class="meta">la carpeta se lee en este equipo; nada se sube a la RPi</span></h2>
+    <div class="form">
+      <label class="field"><span>Desde</span><input type="datetime-local" id="f-desde" step="1"></label>
+      <label class="field"><span>Hasta</span><input type="datetime-local" id="f-hasta" step="1"></label>
+      <div class="field"><span>Rango rápido</span>
+        <div class="row">
+          <button data-rango="hoy">Hoy</button><button data-rango="ayer">Ayer</button>
+          <button data-rango="24h">Últimas 24 h</button><button data-rango="7d">7 días</button>
+        </div>
+      </div>
+      <div class="field" style="grid-column: 1 / -1">
+        <span>Carpeta de imágenes del otro sistema</span>
+        <div class="folder">
+          <button id="btn-folder">Elegir carpeta…</button>
+          <button id="btn-reload" class="hidden" title="Volver a leer la carpeta (si han llegado imágenes nuevas)">Volver a leer</button>
+          <span class="name" id="folder-name">Ninguna (normalmente C:\matriculas)</span>
+        </div>
+        <small>Nombre esperado: <span class="mono">S3,CAM4,260627010336569,3471LXM,9637.jpg</span> → sitio, cámara, fecha (AAMMDDhhmmssmmm), matrícula, …</small>
+        <input type="file" id="f-dir" webkitdirectory directory multiple class="hidden">
+      </div>
+      <label class="field"><span>Sitio del otro sistema</span><select id="f-site"><option value="">Todos</option></select></label>
+      <label class="field"><span>Cámara del otro sistema</span><select id="f-cam"><option value="">Todas</option></select></label>
+      <label class="field"><span>Distancia máxima para «posible misma matrícula»</span><input type="number" id="f-dist" min="1" max="4" step="1" value="2"></label>
+      <label class="field"><span>Ventana de tiempo máxima entre lecturas (min, 0 = sin límite)</span><input type="number" id="f-win" min="0" max="1440" step="1" value="0"></label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="btn-run">Validar</button>
+      <span id="status"></span>
+    </div>
+  </section>
+
+  <section id="results" class="hidden">
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">Lecturas de RAMA</div><div class="val" id="k-rama">—</div><div class="hint" id="k-rama-h"></div></div>
+      <div class="kpi"><div class="lbl">Coincidencias exactas</div><div class="val" id="k-ok">—</div><div class="hint">misma matrícula en el otro sistema</div></div>
+      <div class="kpi"><div class="lbl">Posible misma matrícula</div><div class="val" id="k-pos">—</div><div class="hint" id="k-pos-h">distancia de Levenshtein ≤ 2</div></div>
+      <div class="kpi"><div class="lbl">Sin pareja</div><div class="val" id="k-no">—</div><div class="hint">ni exacta ni parecida</div></div>
+      <div class="kpi"><div class="lbl">Lecturas del otro sistema</div><div class="val" id="k-otro">—</div><div class="hint" id="k-otro-h"></div></div>
+      <div class="kpi"><div class="lbl">Revisadas a mano</div><div class="val" id="k-rev">—</div><div class="hint" id="k-rev-h">RAMA correcta / otro correcto</div></div>
+    </div>
+
+    <section class="card">
+      <details class="sec" id="sec-ok">
+        <summary>Coincidencias <span class="badge b-ok" id="c-ok">0</span><span class="meta">la matrícula de RAMA existe en la carpeta</span>
+          <span class="right"><button id="btn-csv">Exportar CSV</button></span></summary>
+        <div class="sec-body">
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Hora RAMA</th><th>Matrícula</th><th>Hora otro sistema</th><th class="n">Diferencia</th><th>Fotos RAMA</th><th>Foto otro sistema</th><th>Fichero</th></tr></thead>
+              <tbody id="t-ok"></tbody>
+            </table>
+          </div>
+          <button class="more hidden" id="more-ok">Mostrar más</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details class="sec" id="sec-no" open>
+        <summary>Sin coincidencia exacta <span class="badge b-no" id="c-no">0</span><span class="meta">primero las posibles (Levenshtein), después las que no tienen pareja</span>
+          <span class="right">
+            <select id="f-filter" title="Filtrar">
+              <option value="">Todas</option><option value="pos">Solo posibles</option><option value="none">Solo sin pareja</option><option value="pend">Sin revisar</option>
+            </select>
+          </span></summary>
+        <div class="sec-body">
+          <div class="cards" id="cards-no"></div>
+          <button class="more hidden" id="more-no">Mostrar más</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details class="sec" id="sec-otro">
+        <summary>Solo en el otro sistema <span class="badge" id="c-otro">0</span><span class="meta">lecturas del otro sistema sin ninguna lectura de RAMA parecida (posibles vehículos no leídos)</span></summary>
+        <div class="sec-body">
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Hora</th><th>Matrícula</th><th>Sitio</th><th>Cámara</th><th>Foto</th><th>Fichero</th></tr></thead>
+              <tbody id="t-otro"></tbody>
+            </table>
+          </div>
+          <button class="more hidden" id="more-otro">Mostrar más</button>
+        </div>
+      </details>
+    </section>
+  </section>
+</div>
+
+<div class="modal" id="modal"><img alt=""></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ── Conexión con la RPi (igual que /debug) ──────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const HOST = params.get('host') || (location.protocol.startsWith('http') ? location.host : 'localhost:8000');
+  const BASE = params.has('host') || !location.protocol.startsWith('http') ? ''
+    : location.pathname.replace(/\/validacion\/?$/, '').replace(/\/$/, '');
+  const HTTP = `${location.protocol === 'https:' ? 'https' : 'http'}://${HOST}${BASE}`;
+  const capUrl = (name) => name ? `${HTTP}/api/debug/captures/${encodeURIComponent(name)}` : '';
+
+  const $ = (id) => document.getElementById(id);
+  const safe = (fn) => { try { return fn(); } catch (e) { return null; } };
+  const store = {
+    get: (k, d) => safe(() => JSON.parse(localStorage.getItem(k))) ?? d,
+    set: (k, v) => safe(() => localStorage.setItem(k, JSON.stringify(v))),
+  };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  const fmtDT = (ts) => {
+    if (ts == null) return '—';
+    const d = new Date(ts * 1000);
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+  const fmtDelta = (s) => {
+    if (s == null) return '—';
+    const a = Math.abs(s), sg = s >= 0 ? '+' : '−';
+    if (a < 60) return `${sg}${a.toFixed(1)} s`;
+    if (a < 3600) return `${sg}${Math.floor(a / 60)} min ${Math.round(a % 60)} s`;
+    return `${sg}${(a / 3600).toFixed(1)} h`;
+  };
+  const toLocalInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const setStatus = (t, err = false) => { $('status').textContent = t; $('status').classList.toggle('err', err); };
+
+  // ── Nombres de fichero del otro sistema ─────────────────────────────────────
+  // S3,CAM4,260627010336569,3471LXM,9637.jpg → sitio, cámara, AAMMDDhhmmssmmm, matrícula, resto
+  function parseNombre(nombre) {
+    const base = nombre.replace(/\.[^.]+$/, '');
+    const p = base.split(',');
+    if (p.length < 4) return null;
+    const m = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{0,3})$/.exec(p[2].trim());
+    if (!m) return null;
+    const [, yy, mo, dd, hh, mi, ss, ms] = m;
+    const d = new Date(2000 + +yy, +mo - 1, +dd, +hh, +mi, +ss, +(ms || '0').padEnd(3, '0'));
+    if (isNaN(d.getTime())) return null;
+    return { site: p[0].trim(), cam: p[1].trim(), ts: d.getTime() / 1000, plateRaw: p[3].trim(), plate: norm(p[3]), extra: p.slice(4).join(',') };
+  }
+
+  // ── Lectura de la carpeta (en el navegador) ─────────────────────────────────
+  // Con showDirectoryPicker (Chrome/Edge en https o localhost) la carpeta se
+  // recuerda entre visitas; si no, se usa <input webkitdirectory> (cualquier
+  // navegador, pero hay que elegirla cada vez).
+  const IMG_RE = /\.(jpe?g|png|bmp|webp)$/i;
+  let carpeta = null;      // { nombre, handle|null, files|null }
+  let otros = null;        // ficheros parseados (caché hasta volver a leer)
+  let descartados = 0;
+
+  const idb = {
+    open: () => new Promise((res, rej) => {
+      const r = indexedDB.open('rama-validacion', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }),
+    async get(k) { const db = await this.open(); return new Promise((res) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); },
+    async set(k, v) { const db = await this.open(); return new Promise((res) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = res; }); },
+  };
+
+  function mostrarCarpeta() {
+    if (!carpeta) { $('folder-name').textContent = 'Ninguna (normalmente C:\\matriculas)'; return; }
+    const n = otros ? ` · ${otros.length.toLocaleString('es-ES')} imágenes${descartados ? ` (${descartados} con otro formato, ignoradas)` : ''}` : '';
+    $('folder-name').textContent = `${carpeta.nombre}${n}`;
+    $('btn-reload').classList.toggle('hidden', !carpeta.handle);
+  }
+
+  $('btn-folder').onclick = async () => {
+    if (window.showDirectoryPicker) {
+      try {
+        const handle = await window.showDirectoryPicker({ id: 'rama-matriculas', mode: 'read' });
+        carpeta = { nombre: handle.name, handle, files: null };
+        otros = null;
+        safe(() => idb.set('carpeta', handle));
+        mostrarCarpeta();
+        await leerCarpeta();
+      } catch (e) {
+        if (e.name !== 'AbortError') setStatus('No se pudo abrir la carpeta: ' + e.message, true);
+      }
+    } else {
+      $('f-dir').click();
+    }
+  };
+  $('f-dir').onchange = async () => {
+    const files = [...$('f-dir').files];
+    if (!files.length) return;
+    const nombre = (files[0].webkitRelativePath || files[0].name).split('/')[0];
+    carpeta = { nombre, handle: null, files };
+    otros = null;
+    await leerCarpeta();
+  };
+  $('btn-reload').onclick = async () => { otros = null; await leerCarpeta(); };
+
+  async function* recorrer(dir, ruta = '') {
+    for await (const [nombre, h] of dir.entries()) {
+      if (h.kind === 'directory') yield* recorrer(h, `${ruta}${nombre}/`);
+      else yield { nombre, ruta: ruta + nombre, h };
+    }
+  }
+
+  async function leerCarpeta() {
+    if (!carpeta) return null;
+    if (otros) return otros;
+    const lista = [];
+    descartados = 0;
+    setStatus('Leyendo la carpeta…');
+    const anadir = (nombre, ruta, getFile) => {
+      if (!IMG_RE.test(nombre)) return;
+      const p = parseNombre(nombre);
+      if (!p) { descartados++; return; }
+      lista.push({ ...p, nombre, ruta, getFile });
+    };
+    if (carpeta.handle) {
+      if ((await carpeta.handle.queryPermission({ mode: 'read' })) !== 'granted'
+          && (await carpeta.handle.requestPermission({ mode: 'read' })) !== 'granted') {
+        setStatus('Sin permiso para leer la carpeta. Vuelve a elegirla.', true);
+        return null;
+      }
+      let n = 0;
+      for await (const e of recorrer(carpeta.handle)) {
+        anadir(e.nombre, e.ruta, () => e.h.getFile());
+        if (++n % 2000 === 0) setStatus(`Leyendo la carpeta… ${n.toLocaleString('es-ES')} ficheros`);
+      }
+    } else {
+      for (const f of carpeta.files) anadir(f.name, f.webkitRelativePath || f.name, async () => f);
+    }
+    lista.sort((a, b) => a.ts - b.ts);
+    otros = lista;
+    rellenarFiltros();
+    mostrarCarpeta();
+    setStatus(`Carpeta leída: ${lista.length.toLocaleString('es-ES')} imágenes con formato reconocido.`);
+    return otros;
+  }
+
+  function rellenarFiltros() {
+    const cuenta = (k) => otros.reduce((m, o) => (m[o[k]] = (m[o[k]] || 0) + 1, m), {});
+    for (const [sel, k, todos] of [['f-site', 'site', 'Todos'], ['f-cam', 'cam', 'Todas']]) {
+      const prev = store.get(`rama-val-${k}`, '') || $(sel).value;
+      const c = cuenta(k);
+      $(sel).innerHTML = `<option value="">${todos} (${otros.length})</option>` +
+        Object.keys(c).sort().map((v) => `<option value="${esc(v)}">${esc(v)} (${c[v]})</option>`).join('');
+      if (prev && c[prev]) $(sel).value = prev;
+    }
+  }
+  ['f-site', 'f-cam'].forEach((id, i) => $(id).addEventListener('change', () => store.set(`rama-val-${['site', 'cam'][i]}`, $(id).value)));
+
+  // ── Levenshtein ─────────────────────────────────────────────────────────────
+  // Distancia con corte: si ya supera `max`, devuelve max + 1 sin terminar.
+  function lev(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      let minFila = i;
+      for (let j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (cur[j] < minFila) minFila = cur[j];
+      }
+      if (minFila > max) return max + 1;
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  // Marca qué caracteres difieren en cada cadena (para resaltarlos)
+  function difs(a, b) {
+    const n = a.length, m = b.length;
+    const d = Array.from({ length: n + 1 }, (_, i) => { const r = new Array(m + 1).fill(0); r[0] = i; return r; });
+    for (let j = 0; j <= m; j++) d[0][j] = j;
+    for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    const ma = new Array(n).fill(false), mb = new Array(m).fill(false);
+    let i = n, j = m;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && d[i][j] === d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)) {
+        if (a[i - 1] !== b[j - 1]) { ma[i - 1] = true; mb[j - 1] = true; }
+        i--; j--;
+      } else if (i > 0 && d[i][j] === d[i - 1][j] + 1) { ma[i - 1] = true; i--; }
+      else { mb[j - 1] = true; j--; }
+    }
+    return [ma, mb];
+  }
+  const resaltar = (s, marcas) => [...s].map((c, i) => marcas[i] ? `<span class="d">${esc(c)}</span>` : esc(c)).join('');
+
+  // ── Comparación ─────────────────────────────────────────────────────────────
+  // 1) Coincidencia exacta: misma matrícula (y dentro de la ventana si hay).
+  //    Si una matrícula aparece varias veces, se emparejan por cercanía en el
+  //    tiempo, una con una.
+  // 2) Las lecturas de RAMA sin pareja exacta se comparan con las del otro
+  //    sistema que también quedaron sueltas: si la distancia de Levenshtein es
+  //    ≤ máximo, se enlazan como «posible misma matrícula» (la más parecida y,
+  //    a igualdad, la más cercana en el tiempo).
+  // 3) Lo que queda del otro sistema son vehículos que RAMA no leyó (o falsos
+  //    del otro sistema).
+  function emparejar(rama, otrosRango, maxDist, ventana) {
+    const okTiempo = (r, o) => !ventana || Math.abs(o.ts - r.ts) <= ventana;
+    const usadoR = new Set(), usadoO = new Set();
+
+    const porPlaca = new Map();
+    otrosRango.forEach((o, i) => { if (!porPlaca.has(o.plate)) porPlaca.set(o.plate, []); porPlaca.get(o.plate).push(i); });
+    const exactos = [];
+    rama.forEach((r, ri) => (porPlaca.get(norm(r.plate)) || []).forEach((oi) => {
+      if (okTiempo(r, otrosRango[oi])) exactos.push([Math.abs(otrosRango[oi].ts - r.ts), ri, oi]);
+    }));
+    exactos.sort((a, b) => a[0] - b[0]);
+    const ok = [];
+    for (const [, ri, oi] of exactos) {
+      if (usadoR.has(ri) || usadoO.has(oi)) continue;
+      usadoR.add(ri); usadoO.add(oi);
+      ok.push({ r: rama[ri], o: otrosRango[oi] });
+    }
+
+    const posibles = [];
+    rama.forEach((r, ri) => {
+      if (usadoR.has(ri)) return;
+      const pr = norm(r.plate);
+      otrosRango.forEach((o, oi) => {
+        if (usadoO.has(oi) || !okTiempo(r, o)) return;
+        const d = lev(pr, o.plate, maxDist);
+        if (d <= maxDist) posibles.push([d, Math.abs(o.ts - r.ts), ri, oi]);
+      });
+    });
+    posibles.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const no = [];
+    for (const [d, , ri, oi] of posibles) {
+      if (usadoR.has(ri) || usadoO.has(oi)) continue;
+      usadoR.add(ri); usadoO.add(oi);
+      no.push({ r: rama[ri], o: otrosRango[oi], dist: d });
+    }
+    rama.forEach((r, ri) => { if (!usadoR.has(ri)) no.push({ r, o: null, dist: null }); });
+    no.sort((a, b) => (a.o ? 0 : 1) - (b.o ? 0 : 1) || a.r.ts - b.r.ts);
+
+    ok.sort((a, b) => a.r.ts - b.r.ts);
+    const soloOtro = otrosRango.filter((_, oi) => !usadoO.has(oi));
+    return { ok, no, soloOtro };
+  }
+
+  // ── Revisión manual (se guarda en este navegador) ───────────────────────────
+  const VEREDICTOS = { rama: 'RAMA correcta', otro: 'Otro sistema correcto', ninguna: 'Las dos mal', distinto: 'No es el mismo vehículo' };
+  let site = '';
+  let revisiones = {};
+  const claveRev = (p) => `${p.r.id}|${Math.round(p.r.ts)}`;
+  const guardarRev = () => store.set(`rama-val-rev-${site}`, revisiones);
+
+  // ── Ejecutar ────────────────────────────────────────────────────────────────
+  let res = null;
+  const PAGINA = { ok: 100, no: 30, otro: 100 };
+  const mostrados = { ok: 0, no: 0, otro: 0 };
+
+  $('btn-run').onclick = async () => {
+    const desde = new Date($('f-desde').value).getTime() / 1000;
+    const hasta = new Date($('f-hasta').value).getTime() / 1000;
+    if (!isFinite(desde) || !isFinite(hasta) || hasta <= desde) { setStatus('Revisa las fechas: el fin debe ser posterior al inicio.', true); return; }
+    if (!carpeta) { setStatus('Elige primero la carpeta de imágenes del otro sistema.', true); return; }
+    store.set('rama-val-rango', { desde: $('f-desde').value, hasta: $('f-hasta').value });
+    const maxDist = Math.max(1, parseInt($('f-dist').value, 10) || 2);
+    const ventana = Math.max(0, parseFloat($('f-win').value) || 0) * 60;
+    store.set('rama-val-opts', { dist: maxDist, win: ventana / 60 });
+
+    $('btn-run').disabled = true;
+    try {
+      const lista = await leerCarpeta();
+      if (!lista) return;
+      setStatus('Pidiendo las lecturas de RAMA…');
+      const r = await fetch(`${HTTP}/api/validacion/lecturas?desde=${desde}&hasta=${hasta}`);
+      const data = await r.json();
+      if (!r.ok) { setStatus(data.detail || `Error ${r.status}`, true); return; }
+      site = data.camera_id || data.site_name || 'rama';
+      revisiones = store.get(`rama-val-rev-${site}`, {});
+      if (data.site_name) { $('hdr-title').textContent = `${data.site_name} · Validación`; document.title = `RAMA · ${data.site_name} · Validación`; }
+
+      const fs = $('f-site').value, fc = $('f-cam').value;
+      const margen = ventana || 0;
+      const otrosRango = lista.filter((o) => o.ts >= desde - margen && o.ts <= hasta + margen && o.plate
+        && (!fs || o.site === fs) && (!fc || o.cam === fc));
+      setStatus('Comparando…');
+      await new Promise((ok) => setTimeout(ok, 0));
+      res = { ...emparejar(data.lecturas, otrosRango, maxDist, ventana), rama: data.lecturas, otros: otrosRango, perdidas: data.perdidas, maxDist };
+      pintar();
+      setStatus(`Hecho: ${data.lecturas.length} lecturas de RAMA frente a ${otrosRango.length} del otro sistema.`);
+    } catch (e) {
+      setStatus('Error: ' + e.message, true);
+    } finally {
+      $('btn-run').disabled = false;
+    }
+  };
+
+  function pintar() {
+    $('results').classList.remove('hidden');
+    const nPos = res.no.filter((p) => p.o).length, nNo = res.no.length - nPos;
+    const tot = res.rama.length || 1;
+    $('k-rama').textContent = res.rama.length;
+    $('k-rama-h').textContent = res.perdidas
+      ? `${res.perdidas} ${res.perdidas === 1 ? 'paso perdido' : 'pasos perdidos'} en el rango (sin lectura)` : 'aceptadas en el rango';
+    $('k-ok').innerHTML = `${Math.round(res.ok.length * 100 / tot)}% <small>${res.ok.length}</small>`;
+    $('k-pos').innerHTML = `${Math.round(nPos * 100 / tot)}% <small>${nPos}</small>`;
+    $('k-pos-h').textContent = `distancia de Levenshtein ≤ ${res.maxDist}`;
+    $('k-no').innerHTML = `${Math.round(nNo * 100 / tot)}% <small>${nNo}</small>`;
+    $('k-otro').textContent = res.otros.length;
+    $('k-otro-h').textContent = `${res.soloOtro.length} sin ninguna lectura de RAMA parecida`;
+    $('c-ok').textContent = res.ok.length;
+    $('c-no').textContent = res.no.length;
+    $('c-otro').textContent = res.soloOtro.length;
+    pintarRevisadas();
+    mostrados.ok = mostrados.no = mostrados.otro = 0;
+    $('t-ok').innerHTML = ''; $('cards-no').innerHTML = ''; $('t-otro').innerHTML = '';
+    masOk(); masNo(); masOtro();
+  }
+
+  function pintarRevisadas() {
+    const vals = res.no.map((p) => revisiones[claveRev(p)]).filter(Boolean);
+    const c = (k) => vals.filter((v) => v === k).length;
+    $('k-rev').innerHTML = `${vals.length} <small>de ${res.no.length}</small>`;
+    $('k-rev-h').textContent = `RAMA bien ${c('rama')} · otro bien ${c('otro')} · ambas mal ${c('ninguna')} · distinto ${c('distinto')}`;
+  }
+
+  // Imágenes del otro sistema: se crean al pintarlas (URL temporal del fichero local)
+  const urlsOtro = new Map();
+  async function urlOtro(o) {
+    if (!urlsOtro.has(o.ruta)) urlsOtro.set(o.ruta, URL.createObjectURL(await o.getFile()));
+    return urlsOtro.get(o.ruta);
+  }
+  function cargarImagenesOtro(raiz) {
+    raiz.querySelectorAll('img[data-otro]').forEach(async (img) => {
+      const o = img._otro; delete img.dataset.otro;
+      try { img.src = await urlOtro(o); } catch (e) { img.alt = 'No se pudo leer'; }
+    });
+  }
+  const imgOtro = (o, cls) => { const i = document.createElement('img'); i.className = cls; i.dataset.otro = '1'; i._otro = o; i.alt = 'otro sistema'; i.title = o.ruta; return i; };
+
+  function masOk() {
+    const lote = res.ok.slice(mostrados.ok, mostrados.ok + PAGINA.ok);
+    const tb = $('t-ok');
+    for (const p of lote) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${fmtDT(p.r.ts)}</td><td class="mono">${esc(p.r.plate)}</td><td>${fmtDT(p.o.ts)}</td>
+        <td class="n">${fmtDelta(p.o.ts - p.r.ts)}</td>
+        <td><div class="thumbs">${p.r.capture_full ? `<img class="th full" loading="lazy" src="${capUrl(p.r.capture_full)}" alt="">` : ''}${p.r.capture_crop ? `<img class="th" loading="lazy" src="${capUrl(p.r.capture_crop)}" alt="">` : ''}${!p.r.capture_full && !p.r.capture_crop ? '<span class="dim">borrada</span>' : ''}</div></td>
+        <td class="ot"></td><td class="dim mono" style="font-size:12px">${esc(p.o.nombre)}</td>`;
+      tr.querySelector('.ot').appendChild(imgOtro(p.o, 'th full'));
+      tb.appendChild(tr);
+    }
+    mostrados.ok += lote.length;
+    cargarImagenesOtro(tb);
+    $('more-ok').classList.toggle('hidden', mostrados.ok >= res.ok.length);
+  }
+
+  function filtroNo(p) {
+    const f = $('f-filter').value;
+    if (f === 'pos') return !!p.o;
+    if (f === 'none') return !p.o;
+    if (f === 'pend') return !revisiones[claveRev(p)];
+    return true;
+  }
+
+  function tarjeta(p) {
+    const div = document.createElement('div');
+    div.className = 'pair';
+    const pr = norm(p.r.plate), po = p.o ? p.o.plate : '';
+    const [ma, mb] = p.o ? difs(pr, po) : [[], []];
+    const v = revisiones[claveRev(p)];
+    const lecturasOcr = (p.r.readings || []).map((x) => `${esc(x.text)} ×${x.n}`).join(', ');
+    div.innerHTML = `
+      <div class="head">
+        ${p.o ? `<span class="badge b-pos">Posible · distancia ${p.dist}</span>` : '<span class="badge b-no">Sin pareja</span>'}
+        <span class="dim">RAMA ${fmtDT(p.r.ts)}${p.o ? ` · otro sistema ${fmtDT(p.o.ts)} (${fmtDelta(p.o.ts - p.r.ts)})` : ''}</span>
+      </div>
+      <div class="sides">
+        <div class="side">
+          <div class="who"><b>RAMA</b><span>sesión #${esc(p.r.id)}${p.r.accepted_conf != null ? ` · conf. OCR ${(+p.r.accepted_conf).toFixed(2)}` : ''}${p.r.accepted_on_exit ? ' · decidida al salir' : ''}</span></div>
+          <div class="plate">${p.o ? resaltar(pr, ma) : esc(pr)}</div>
+          <div class="imgs">
+            ${p.r.capture_full ? `<img class="full" loading="lazy" src="${capUrl(p.r.capture_full)}" alt="vehículo (RAMA)">` : '<div class="noimg">Captura de RAMA ya borrada</div>'}
+            ${p.r.capture_crop ? `<img class="crop" loading="lazy" src="${capUrl(p.r.capture_crop)}" alt="matrícula (RAMA)">` : ''}
+          </div>
+          ${lecturasOcr ? `<div class="who"><span>Lecturas OCR: ${lecturasOcr}</span></div>` : ''}
+        </div>
+        <div class="side">
+          <div class="who"><b>Otro sistema</b>${p.o ? `<span>${esc(p.o.site)} · ${esc(p.o.cam)}</span>` : ''}</div>
+          ${p.o ? `<div class="plate">${resaltar(po, mb)}</div><div class="imgs"></div><div class="who"><span class="mono">${esc(p.o.nombre)}</span></div>`
+                : `<div class="noimg">Ninguna lectura del otro sistema a distancia ≤ ${res.maxDist}${parseFloat($('f-win').value) ? ' dentro de la ventana de tiempo' : ''}</div>`}
+        </div>
+      </div>
+      <div class="verdict"><span>¿Cuál está bien?</span>
+        ${Object.entries(VEREDICTOS).filter(([k]) => p.o || k === 'rama' || k === 'ninguna')
+          .map(([k, t]) => `<button data-v="${k}" class="${v === k ? 'on' : ''}">${t}</button>`).join('')}
+      </div>`;
+    if (p.o) div.querySelector('.side:last-child .imgs').appendChild(imgOtro(p.o, 'full'));
+    div.querySelector('.verdict').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-v]');
+      if (!b) return;
+      const k = claveRev(p);
+      if (revisiones[k] === b.dataset.v) delete revisiones[k]; else revisiones[k] = b.dataset.v;
+      guardarRev();
+      div.querySelectorAll('button[data-v]').forEach((x) => x.classList.toggle('on', revisiones[k] === x.dataset.v));
+      pintarRevisadas();
+    });
+    return div;
+  }
+
+  function masNo() {
+    const lista = res.no.filter(filtroNo);
+    const lote = lista.slice(mostrados.no, mostrados.no + PAGINA.no);
+    const cont = $('cards-no');
+    if (!lista.length) cont.innerHTML = '<div class="empty">Nada que mostrar con este filtro.</div>';
+    for (const p of lote) cont.appendChild(tarjeta(p));
+    mostrados.no += lote.length;
+    cargarImagenesOtro(cont);
+    $('more-no').classList.toggle('hidden', mostrados.no >= lista.length);
+  }
+  $('f-filter').onchange = () => { if (!res) return; mostrados.no = 0; $('cards-no').innerHTML = ''; masNo(); };
+
+  function masOtro() {
+    const lote = res.soloOtro.slice(mostrados.otro, mostrados.otro + PAGINA.otro);
+    const tb = $('t-otro');
+    for (const o of lote) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${fmtDT(o.ts)}</td><td class="mono">${esc(o.plateRaw)}</td><td>${esc(o.site)}</td><td>${esc(o.cam)}</td><td class="ot"></td><td class="dim mono" style="font-size:12px">${esc(o.nombre)}</td>`;
+      tr.querySelector('.ot').appendChild(imgOtro(o, 'th full'));
+      tb.appendChild(tr);
+    }
+    mostrados.otro += lote.length;
+    cargarImagenesOtro(tb);
+    $('more-otro').classList.toggle('hidden', mostrados.otro >= res.soloOtro.length);
+  }
+  $('more-ok').onclick = masOk; $('more-no').onclick = masNo; $('more-otro').onclick = masOtro;
+
+  // ── Exportar ────────────────────────────────────────────────────────────────
+  $('btn-csv').onclick = (e) => {
+    e.preventDefault();
+    if (!res) return;
+    // Fecha y hora locales (las del equipo), no UTC
+    const iso = (ts) => {
+      if (ts == null) return '';
+      const d = new Date(ts * 1000);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    const filas = [
+      ...res.ok.map((p) => ['coincidencia', p.r.id, iso(p.r.ts), p.r.plate, iso(p.o.ts), p.o.plateRaw, p.o.nombre, 0, (p.o.ts - p.r.ts).toFixed(1), '']),
+      ...res.no.map((p) => [p.o ? 'posible' : 'sin_pareja', p.r.id, iso(p.r.ts), p.r.plate, iso(p.o?.ts), p.o?.plateRaw ?? '', p.o?.nombre ?? '',
+        p.dist ?? '', p.o ? (p.o.ts - p.r.ts).toFixed(1) : '', VEREDICTOS[revisiones[claveRev(p)]] || '']),
+      ...res.soloOtro.map((o) => ['solo_otro_sistema', '', '', '', iso(o.ts), o.plateRaw, o.nombre, '', '', '']),
+    ];
+    const cab = ['tipo', 'sesion_rama', 'hora_rama', 'matricula_rama', 'hora_otro', 'matricula_otro', 'fichero_otro', 'distancia', 'diferencia_s', 'revision'];
+    const q = (v) => /[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
+    const csv = [cab.join(';'), ...filas.map((f) => f.map(q).join(';'))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' }));
+    a.download = `validacion-${site}-${$('f-desde').value.slice(0, 10)}_${$('f-hasta').value.slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+
+  // ── Rango de fechas ─────────────────────────────────────────────────────────
+  function rango(tipo) {
+    const ahora = new Date(), ini = new Date(), fin = new Date();
+    ini.setHours(0, 0, 0, 0);
+    if (tipo === 'ayer') { ini.setDate(ini.getDate() - 1); fin.setTime(ini.getTime()); fin.setHours(23, 59, 59, 0); }
+    else if (tipo === '24h') { ini.setTime(ahora.getTime() - 86400000); fin.setTime(ahora.getTime()); }
+    else if (tipo === '7d') { ini.setDate(ini.getDate() - 6); fin.setTime(ahora.getTime()); }
+    else fin.setTime(ahora.getTime());
+    $('f-desde').value = toLocalInput(ini);
+    $('f-hasta').value = toLocalInput(fin);
+  }
+  document.querySelectorAll('[data-rango]').forEach((b) => { b.onclick = () => rango(b.dataset.rango); });
+
+  // ── Imagen grande ───────────────────────────────────────────────────────────
+  document.addEventListener('click', (e) => {
+    if (e.target.matches('.pair img, td img.th')) {
+      $('modal').querySelector('img').src = e.target.src;
+      $('modal').classList.add('show');
+    } else if (e.target.closest('#modal')) $('modal').classList.remove('show');
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('modal').classList.remove('show'); });
+
+  // ── Tema ────────────────────────────────────────────────────────────────────
+  const themes = [null, 'dark', 'light'];
+  let theme = store.get('rama-debug-theme', null);
+  const applyTheme = () => {
+    if (theme) document.documentElement.dataset.theme = theme; else delete document.documentElement.dataset.theme;
+    $('btn-theme').textContent = `Tema: ${theme === 'dark' ? 'oscuro' : theme === 'light' ? 'claro' : 'auto'}`;
+  };
+  $('btn-theme').onclick = () => { theme = themes[(themes.indexOf(theme) + 1) % themes.length]; store.set('rama-debug-theme', theme); applyTheme(); };
+
+  // ── Inicio ──────────────────────────────────────────────────────────────────
+  applyTheme();
+  $('lnk-debug').href = `${BASE}/debug${params.has('host') ? `?host=${encodeURIComponent(HOST)}` : ''}`;
+  const r0 = store.get('rama-val-rango', null);
+  if (r0) { $('f-desde').value = r0.desde; $('f-hasta').value = r0.hasta; } else rango('hoy');
+  const o0 = store.get('rama-val-opts', null);
+  if (o0) { $('f-dist').value = o0.dist; $('f-win').value = o0.win; }
+  // Carpeta recordada (solo con showDirectoryPicker): el permiso se pide al validar
+  if (window.showDirectoryPicker) {
+    idb.get('carpeta').then((h) => {
+      if (h && !carpeta) { carpeta = { nombre: h.name, handle: h, files: null }; mostrarCarpeta(); $('folder-name').textContent += ' (recordada)'; }
+    }).catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>

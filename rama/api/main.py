@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import detections, state, settings, websocket, debug
+from api.routes import detections, state, settings, websocket, debug, validacion
 
 app = FastAPI()
 
@@ -21,6 +21,7 @@ app.include_router(state.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(websocket.router)
 app.include_router(debug.router)
+app.include_router(validacion.router)
 
 
 @app.on_event("startup")

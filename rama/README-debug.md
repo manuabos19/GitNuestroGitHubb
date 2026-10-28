@@ -27,6 +27,7 @@ Copiar sobre el proyecto RAMA respetando las rutas:
 | `core/detector_coral_multi.py` | **Nuevo.** Hereda de tu `DetectorCoral` y añade `detect_all()` (todas las matrículas, con NMS). No toca `detector_coral.py` |
 | `api/routes/debug.py` | **Nuevo.** `/debug`, `/ws/debug`, `/api/debug/snapshot`, `/api/debug/captures/{fichero}`, `/api/debug/frame.jpg`, `POST /api/debug/detection-config`, `POST /api/debug/reset` |
 | `api/static/debug.html` | **Nuevo.** El dashboard (HTML + JS sin dependencias) |
+| `api/routes/validacion.py`, `api/static/validacion.html` | **Nuevo.** Página de validación frente a otro sistema (`/validacion`, `GET /api/validacion/lecturas`) |
 | `core/pipeline.py` | Último frame (sin `frame_skip`), ROI, seguimiento, OCR con `home_country`, telemetría. **Fingerprint desactivado** |
 | `core/validator.py` | Tolera `max_missed_frames`; `finalize()` para decidir al salir; guarda `last_decision` |
 | `core/detector_yolo.py` | Devuelve también el bbox; añade `detect_all()` |
@@ -84,6 +85,40 @@ debug:
   `https://panel/camara/parking1/debug` usa `/camara/parking1/api/...` y
   `/camara/parking1/ws/...`, así el panel general puede servirlo a través
   de un proxy sin cambiar nada. `?fps=N` fija los fps del vídeo.
+
+## Validación frente a otro sistema (`/validacion`)
+
+`http://IP_RPI:8000/validacion` (o el enlace «Validación» del dashboard).
+
+1. Elige el rango de fechas.
+2. «Elegir carpeta…»: la carpeta de imágenes del otro sistema (normalmente
+   `C:\matriculas`). **La lee el navegador del equipo donde está**, la RPi no
+   necesita acceso a ella y no se sube nada. En Chrome/Edge sobre https o
+   localhost la carpeta se recuerda; sobre `http://IP_RPI` hay que elegirla
+   cada vez. Se leen también las subcarpetas.
+3. Nombres esperados: `S3,CAM4,260627010336569,3471LXM,9637.jpg` → sitio,
+   cámara, fecha `AAMMDDhhmmssmmm`, matrícula, resto. Los ficheros con otro
+   formato se ignoran (se indica cuántos). Se puede filtrar por sitio y cámara.
+4. «Validar». Para cada lectura aceptada por RAMA en el rango
+   (`sesiones.jsonl`, `GET /api/validacion/lecturas`):
+   - **Coincidencias**: existe un fichero con la misma matrícula. Si una
+     matrícula pasa varias veces se emparejan una a una por cercanía en el tiempo.
+   - **Sin coincidencia exacta**: se busca entre las lecturas del otro sistema
+     que quedaron sueltas la más parecida con distancia de Levenshtein ≤ 2
+     (configurable) → «posible misma matrícula», con las fotos de los dos
+     sistemas y los caracteres distintos marcados. Las que no tienen ninguna
+     parecida quedan como «sin pareja».
+   - **Solo en el otro sistema**: lecturas del otro sistema sin ninguna de
+     RAMA parecida (posibles vehículos que RAMA no leyó).
+5. En cada posible se marca cuál está bien (RAMA / otro / las dos mal / no es
+   el mismo vehículo). Se guarda en el navegador y sale en el CSV.
+
+Opcional: «ventana de tiempo máxima» para emparejar solo lecturas separadas
+como mucho N minutos (0 = solo por matrícula dentro del rango).
+
+Las fotos de RAMA son las capturas de `debug_captures/`; las más antiguas se
+borran al pasar de `debug.max_captures` (1000 por defecto). Para validar
+rangos largos con fotos, sube ese valor.
 
 ## Zona de detección (ROI)
 

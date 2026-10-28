@@ -92,7 +92,8 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; padding: 5px 10px; cursor: pointer;
   }
-  button:hover { background: var(--surface-2); }
+  button:hover, a.btn:hover { background: var(--surface-2); }
+  a.btn { text-decoration: none; display: inline-block; }
   button.on { background: var(--surface-2); border-color: var(--axis); }
 
   .kpis {
@@ -273,6 +274,7 @@
       <span class="pill" id="pill-sys">—</span>
     </div>
     <span class="spacer"></span>
+    <a class="btn" id="lnk-val" href="validacion" title="Comparar las lecturas con otro sistema de reconocimiento">Validación</a>
     <button id="btn-video" class="on" title="Desactivar el vídeo ahorra CPU en la RPi">Vídeo</button>
     <button id="btn-pause" title="Congela el registro de frames y las gráficas">Pausar</button>
     <button id="btn-reset" title="Pone a cero contadores y sesiones en el servidor">Reset</button>
@@ -1288,6 +1290,7 @@
   setInterval(renderCurrentSession, 500);
 
   applyTheme();
+  $('lnk-val').href = `${BASE}/validacion${params.has('host') ? `?host=${encodeURIComponent(HOST)}` : ''}`;
   setVideo(videoOn);
   updateDeps();
   snapRoi();

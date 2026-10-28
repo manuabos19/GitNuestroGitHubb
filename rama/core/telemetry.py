@@ -138,6 +138,11 @@ class Telemetry:
     def _jsonl(self):
         return os.path.join(self.dir_capturas, 'sesiones.jsonl')
 
+    @property
+    def ruta_sesiones(self):
+        """Ruta de sesiones.jsonl (histórico completo de pasos de vehículo)."""
+        return self._jsonl
+
     def _cargar_historico(self):
         """Carga las últimas sesiones de sesiones.jsonl al arrancar."""
         try:
